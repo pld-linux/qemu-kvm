@@ -31,6 +31,7 @@ BuildRequires:	sed >= 4.0
 BuildRequires:	texi2html
 BuildRequires:	which
 BuildRequires:	xorg-lib-libX11-devel
+BuildRequires:	pulseaudio-devel
 # LinuxAIO support
 BuildRequires:	libaio-devel
 BuildRequires:	libevent-devel
