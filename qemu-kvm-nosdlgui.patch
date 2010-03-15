@@ -1,0 +1,1075 @@
+diff -Nur qemu-0.7.0.orig/Makefile.target qemu-0.7.0.chng/Makefile.target
+--- qemu-0.7.0.orig/Makefile.target	2005-07-06 23:38:02.000000000 +0000
++++ qemu-0.7.0.chng/Makefile.target	2005-07-06 23:42:48.000000000 +0000
+@@ -392,7 +392,7 @@
+ endif
+ 
+ $(QEMU_SYSTEM): $(VL_OBJS) libqemu.a
+-	$(CC) $(VL_LDFLAGS) -o $@ $^ $(LIBS) $(SDL_LIBS) $(COCOA_LIBS) $(VL_LIBS)
++	$(CC) $(VL_LDFLAGS) -o $@ $^ $(LIBS) $(SDL_LIBS) $(COCOA_LIBS) $(VL_LIBS) -L/usr/X11R6/lib -lX11 -lpthread
+ 
+ cocoa.o: cocoa.m
+ 	$(CC) $(CFLAGS) $(DEFINES) -c -o $@ $<
+--- qemu-0.7.1/sdl.c.orig	2005-07-24 20:52:08.000000000 +0200
++++ qemu-0.7.1/sdl.c	2005-08-23 01:47:48.000000000 +0200
+@@ -1,506 +1,614 @@
+ /*
+- * QEMU SDL display driver
+- * 
+- * Copyright (c) 2003 Fabrice Bellard
+- * 
+- * Permission is hereby granted, free of charge, to any person obtaining a copy
+- * of this software and associated documentation files (the "Software"), to deal
+- * in the Software without restriction, including without limitation the rights
+- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+- * copies of the Software, and to permit persons to whom the Software is
+- * furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice and this permission notice shall be included in
+- * all copies or substantial portions of the Software.
++ * Xlib interface for QEMU System Emulator
+  *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+- * THE SOFTWARE.
+- */
+-#include "vl.h"
++ * Copyright (c) 2004 Vladimit Oleynik <dzo@simtreas.ru>
++ * Used ideas from Bochs, SDL, PCEmu.
++*/
+ 
+-#include <SDL.h>
++#include <X11/Xlib.h>
++#include <X11/Xutil.h>
++#include <X11/keysym.h>
+ 
+-#ifndef _WIN32
+-#include <signal.h>
+-#endif
++/* hack, special for qemu */
++#define X_display_init sdl_display_init
++
++#define icon_width 40
++#define icon_height 32
++static unsigned char icon_bits[] = {
++  0x3e, 0x26, 0x00, 0x00, 0x00,
++  0x24, 0x04, 0x01, 0x00, 0x00,
++  0x04, 0x04, 0x01, 0x00, 0x00,
++  0x14, 0xb7, 0xb3, 0x06, 0x00,
++  0x9c, 0x24, 0x49, 0x05, 0x00,
++  0x94, 0x24, 0x49, 0x01, 0x00,
++  0x84, 0x24, 0x49, 0x01, 0x00,
++  0xa4, 0x24, 0x49, 0x01, 0x00,
++  0x3e, 0x27, 0x32, 0x03, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x08, 0x00, 0x77, 0x00, 0x00,
++  0x04, 0x00, 0x22, 0x00, 0x00,
++  0x04, 0x00, 0x14, 0x00, 0x00,
++  0xce, 0x1a, 0x14, 0x00, 0x00,
++  0x24, 0x15, 0x08, 0x00, 0x00,
++  0x24, 0x05, 0x14, 0x00, 0x00,
++  0x24, 0x05, 0x14, 0x00, 0x00,
++  0x24, 0x05, 0x22, 0x00, 0x00,
++  0xcc, 0x0c, 0x07, 0x00, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x00, 0x00, 0x00, 0x00, 0x00,
++  0x04, 0x00, 0x01, 0x00, 0x00,
++  0x04, 0x00, 0x01, 0x00, 0x00,
++  0xce, 0xb6, 0xb3, 0xb6, 0x0d,
++  0x24, 0x15, 0x49, 0x49, 0x09,
++  0xe4, 0x09, 0x79, 0x49, 0x09,
++  0x24, 0x08, 0x09, 0x49, 0x09,
++  0x24, 0x15, 0x49, 0x49, 0x09,
++  0xc8, 0x36, 0x32, 0x49, 0x0e,
++};
++
++#include "vl.h"
+ 
+-static SDL_Surface *screen;
+-static int gui_grab; /* if true, all keyboard/mouse events are grabbed */
+ static int last_vm_running;
+-static int gui_saved_grab;
+-static int gui_fullscreen;
+-static int gui_key_modifier_pressed;
+-static int gui_keysym;
+-static int gui_fullscreen_initial_grab;
+-static int gui_grab_code = KMOD_LALT | KMOD_LCTRL;
+-static uint8_t modifiers_state[256];
+ 
+-static void sdl_update(DisplayState *ds, int x, int y, int w, int h)
++static Display *qx_display;
++static int q_x_screen_num;
++static Window win;
++static GC gc;
++static XImage *ximage = NULL;
++static int     default_depth;
++static Visual  *default_visual;
++static int width, height;
++
++static void x_update(DisplayState *ds, int x, int y, int w, int h)
+ {
+-    //    printf("updating x=%d y=%d w=%d h=%d\n", x, y, w, h);
+-    SDL_UpdateRect(screen, x, y, w, h);
++    XPutImage(qx_display, win, gc, ximage, x, y, x, y, w, h);
++    XFlush(qx_display);
+ }
+ 
+-static void sdl_resize(DisplayState *ds, int w, int h)
++static int prev_x, prev_y;
++static int current_x, current_y;
++
++/* Move the cursor to a center window place */
++static void qXWarpPointer(void)
+ {
+-    int flags;
++	int x = width/2;
++	int y = height/2;
+ 
+-    //    printf("resizing to %d %d\n", w, h);
++	prev_x = current_x = x;
++	prev_y = current_y = y;
++	XWarpPointer(qx_display, None, win, 0, 0, 0, 0, x, y);
++}
+ 
+-    flags = SDL_HWSURFACE|SDL_ASYNCBLIT|SDL_HWACCEL;
+-    if (gui_fullscreen)
+-        flags |= SDL_FULLSCREEN;
+-    screen = SDL_SetVideoMode(w, h, 0, flags);
+-    if (!screen) {
+-        fprintf(stderr, "Could not open SDL display\n");
+-        exit(1);
++static void x_resize(DisplayState *ds, int w, int h)
++{
++    XSizeHints hints;
++    long supplied_return;
++
++    if ( XGetWMNormalHints(qx_display, win, &hints, &supplied_return) &&
++	 supplied_return & PMaxSize ) {
++      hints.max_width = hints.min_width = w;
++      hints.max_height = hints.min_height = h;
++      XSetWMNormalHints(qx_display, win, &hints);
+     }
+-    ds->data = screen->pixels;
+-    ds->linesize = screen->pitch;
+-    ds->depth = screen->format->BitsPerPixel;
+-    ds->width = w;
+-    ds->height = h;
++    if(ximage) {
++	XDestroyImage(ximage);
++//        free(ds->data);
++	XResizeWindow(qx_display, win, w, h);
++    }
++    ximage = XCreateImage(qx_display, default_visual,
++	     default_depth,          // depth of image (bitplanes)
++	     ZPixmap,
++	     0,                      // offset
++	     NULL,                   // malloc() space after
++	     w, h,                   // x & y size of image
++	     32,                     // # bits of padding
++	     0 );                    // bytes_per_line, let X11 calculate
++    if (!ximage) {
++	fprintf(stderr, "Could not XCreateImage()\n");
++	exit(1);
++    }
++    width = ds->width = w;
++    height = ds->height = h;
++    ds->depth = ximage->bits_per_pixel;
++    ds->linesize = ximage->bytes_per_line;
++    ds->data = (char *) malloc( (size_t) (ximage->bytes_per_line * h) );
++    if (!ds->data) {
++	fprintf(stderr, "Could not malloc Image data\n");
++	exit(1);
++    }
++    ximage->data = ds->data;
++    qXWarpPointer();
++    XFlush(qx_display);
+ }
+ 
+-/* generic keyboard conversion */
++static int gui_grab;
+ 
+-#include "sdl_keysym.h"
+-#include "keymaps.c"
++static void x_SetCaption(void)
++{
++	char *title, *icon;
++	XTextProperty titleprop, iconprop;
+ 
+-static kbd_layout_t *kbd_layout = NULL;
++	title = icon = "QEMU";
++	if (!vm_running && !gui_grab)
++		title = "QEMU [Stopped]";
++	if (vm_running && gui_grab)
++		title = "QEMU - Press Ctrl-Shift to exit grab";
++	if (!vm_running && gui_grab)
++		title = "QEMU [Stopped] - Press Ctrl-Shift to exit grab";
+ 
+-static uint8_t sdl_keyevent_to_keycode_generic(const SDL_KeyboardEvent *ev)
+-{
+-    int keysym;
+-    /* workaround for X11+SDL bug with AltGR */
+-    keysym = ev->keysym.sym;
+-    if (keysym == 0 && ev->keysym.scancode == 113)
+-        keysym = SDLK_MODE;
+-    return keysym2scancode(kbd_layout, keysym);
++	XStringListToTextProperty(&title, 1, &titleprop);
++	XSetWMName(qx_display, win, &titleprop);
++	XFree(titleprop.value);
++
++	XStringListToTextProperty(&icon, 1, &iconprop);
++	XSetWMIconName(qx_display, win, &iconprop);
++	XFree(iconprop.value);
++	XSync(qx_display, /* no discard */ 0);
+ }
+ 
+-/* specific keyboard conversions from scan codes */
++static void trigger_mouse_grab(void)
++{
++  gui_grab ^= 1;
++  if (gui_grab) {
++      /* disable cursor */
++      static Cursor cursor;
++      static int cursor_created;
+ 
+-#if defined(_WIN32)
++#define shape_width 16
++#define shape_height 16
++#define mask_width 16
++#define mask_height 16
+ 
+-static uint8_t sdl_keyevent_to_keycode(const SDL_KeyboardEvent *ev)
+-{
+-    return ev->keysym.scancode;
+-}
++      static unsigned int shape_bits[(16*16)/32];
++      static unsigned int mask_bits[(16*16)/32];
+ 
+-#else
++      if (!cursor_created) {
++	    Pixmap shape, mask;
++	    XColor white, black;
++	    Colormap default_cmap;
+ 
+-static const uint8_t x_keycode_to_pc_keycode[61] = {
+-   0xc7,      /*  97  Home   */
+-   0xc8,      /*  98  Up     */
+-   0xc9,      /*  99  PgUp   */
+-   0xcb,      /* 100  Left   */
+-   0x4c,        /* 101  KP-5   */
+-   0xcd,      /* 102  Right  */
+-   0xcf,      /* 103  End    */
+-   0xd0,      /* 104  Down   */
+-   0xd1,      /* 105  PgDn   */
+-   0xd2,      /* 106  Ins    */
+-   0xd3,      /* 107  Del    */
+-   0x9c,      /* 108  Enter  */
+-   0x9d,      /* 109  Ctrl-R */
+-   0x0,       /* 110  Pause  */
+-   0xb7,      /* 111  Print  */
+-   0xb5,      /* 112  Divide */
+-   0xb8,      /* 113  Alt-R  */
+-   0xc6,      /* 114  Break  */   
+-   0x0,         /* 115 */
+-   0x0,         /* 116 */
+-   0x0,         /* 117 */
+-   0x0,         /* 118 */
+-   0x0,         /* 119 */
+-   0x70,         /* 120 Hiragana_Katakana */
+-   0x0,         /* 121 */
+-   0x0,         /* 122 */
+-   0x73,         /* 123 backslash */
+-   0x0,         /* 124 */
+-   0x0,         /* 125 */
+-   0x0,         /* 126 */
+-   0x0,         /* 127 */
+-   0x0,         /* 128 */
+-   0x79,         /* 129 Henkan */
+-   0x0,         /* 130 */
+-   0x7b,         /* 131 Muhenkan */
+-   0x0,         /* 132 */
+-   0x7d,         /* 133 Yen */
+-   0x0,         /* 134 */
+-   0x0,         /* 135 */
+-   0x47,         /* 136 KP_7 */
+-   0x48,         /* 137 KP_8 */
+-   0x49,         /* 138 KP_9 */
+-   0x4b,         /* 139 KP_4 */
+-   0x4c,         /* 140 KP_5 */
+-   0x4d,         /* 141 KP_6 */
+-   0x4f,         /* 142 KP_1 */
+-   0x50,         /* 143 KP_2 */
+-   0x51,         /* 144 KP_3 */
+-   0x52,         /* 145 KP_0 */
+-   0x53,         /* 146 KP_. */
+-   0x47,         /* 147 KP_HOME */
+-   0x48,         /* 148 KP_UP */
+-   0x49,         /* 149 KP_PgUp */
+-   0x4b,         /* 150 KP_Left */
+-   0x4c,         /* 151 KP_ */
+-   0x4d,         /* 152 KP_Right */
+-   0x4f,         /* 153 KP_End */
+-   0x50,         /* 154 KP_Down */
+-   0x51,         /* 155 KP_PgDn */
+-   0x52,         /* 156 KP_Ins */
+-   0x53,         /* 157 KP_Del */
+-};
++	    default_cmap = DefaultColormap(qx_display, q_x_screen_num);
+ 
+-static uint8_t sdl_keyevent_to_keycode(const SDL_KeyboardEvent *ev)
+-{
+-    int keycode;
++	    shape = XCreatePixmapFromBitmapData(qx_display,
++						RootWindow(qx_display,q_x_screen_num),
++						(char*)shape_bits,
++						shape_width, shape_height,
++						1, 0, 1);
++	    mask =  XCreatePixmapFromBitmapData(qx_display,
++						RootWindow(qx_display,q_x_screen_num),
++						(char*)mask_bits,
++						mask_width, mask_height,
++						1, 0, 1);
++	    XParseColor(qx_display, default_cmap, "black", &black);
++	    XParseColor(qx_display, default_cmap, "white", &white);
++	    cursor = XCreatePixmapCursor(qx_display, shape, mask,
++					 &white, &black, 1, 1);
++	    cursor_created = 1;
++      }
++      XDefineCursor(qx_display, win, cursor);
+ 
+-    keycode = ev->keysym.scancode;
++      /* grab pointer and keyboard */
+ 
+-    if (keycode < 9) {
+-        keycode = 0;
+-    } else if (keycode < 97) {
+-        keycode -= 8; /* just an offset */
+-    } else if (keycode < 158) {
+-        /* use conversion table */
+-        keycode = x_keycode_to_pc_keycode[keycode - 97];
+-    } else {
+-        keycode = 0;
+-    }
+-    return keycode;
++//    if ( flags & FULLSCREEN ) {
++//      /* Unbind the mouse from the fullscreen window */
++//      XUngrabPointer(qx_display, CurrentTime);
++//    }
++      /* Try to grab the mouse */
++      while ( 1 ) {
++	int result = XGrabPointer(qx_display, win, True, 0,
++					GrabModeAsync, GrabModeAsync,
++					win, None, CurrentTime);
++	if (result == GrabSuccess)
++		break;
++      }
++      /* Now grab the keyboard */
++      XGrabKeyboard(qx_display, win, True,
++			GrabModeAsync, GrabModeAsync, CurrentTime);
++
++      /* Raise the window if we grab the mouse */
++//    if ( !(flags & FULLSCREEN) )
++	XRaiseWindow(qx_display, win);
++      qXWarpPointer();
++  } else {
++    /* enable cursor */
++    XUndefineCursor(qx_display, win);
++    /* ungrab pointer and keyboard */
++    XUngrabPointer(qx_display, CurrentTime);
++    XUngrabKeyboard(qx_display, CurrentTime);
++  }
++  x_SetCaption();
+ }
+ 
+-#endif
++static unsigned mouse_button_state;
+ 
+-static void reset_keys(void)
++static void send_keyboard_mouse_status(void)
+ {
+-    int i;
+-    for(i = 0; i < 256; i++) {
+-        if (modifiers_state[i]) {
+-            if (i & 0x80)
+-                kbd_put_keycode(0xe0);
+-            kbd_put_keycode(i | 0x80);
+-            modifiers_state[i] = 0;
+-        }
++    int dx, dy;
++
++    dx = current_x - prev_x;
++    dy = -(current_y - prev_y);
++    kbd_mouse_event(dx, -dy, 0, mouse_button_state);
++    if(current_x <= 1 || current_x >= (width-1) || current_y <= 1 || current_y >= (height-1)) {
++	qXWarpPointer();
++    } else {
++	prev_x = current_x;
++	prev_y = current_y;
+     }
+ }
+ 
+-static void sdl_process_key(SDL_KeyboardEvent *ev)
++static const unsigned char scan_table1[] =
+ {
+-    int keycode, v;
++    0x39, 0x02,
++#ifdef KBUK             /* double quotes, hash symbol */
++    0x03, 0x2b,
++#else
++    0x28, 0x04,
++#endif
++    0x05, 0x06, 0x08, 0x28,
++    0x0a, 0x0b, 0x09, 0x0d, 0x33, 0x0c, 0x34, 0x35,
++    0x0b, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
++    0x09, 0x0a, 0x27, 0x27, 0x33, 0x0d, 0x34, 0x35,
++#ifdef KBUK             /* at symbol */
++    0x28,
++#else
++    0x03,
++#endif
++    0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,
++    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,
++    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,
++    0x2d, 0x15, 0x2c, 0x1a,
++#ifdef KBUK             /* backslash */
++    0x56,
++#else
++    0x2b,
++#endif
++    0x1b, 0x07, 0x0c,
++    0x29, 0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22,
++    0x23, 0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18,
++    0x19, 0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11,
++    0x2d, 0x15, 0x2c, 0x1a,
++#ifdef KBUK             /* vertical bar */
++    0x56,
++#else
++    0x2b,
++#endif
+ 
+-    if (ev->keysym.sym == SDLK_PAUSE) {
+-        /* specific case */
+-        v = 0;
+-        if (ev->type == SDL_KEYUP)
+-            v |= 0x80;
+-        kbd_put_keycode(0xe1);
+-        kbd_put_keycode(0x1d | v);
+-        kbd_put_keycode(0x45 | v);
+-        return;
+-    }
++    0x1b,
+ 
+-    if (kbd_layout) {
+-        keycode = sdl_keyevent_to_keycode_generic(ev);
+-    } else {
+-        keycode = sdl_keyevent_to_keycode(ev);
+-    }
++#ifdef KBUK             /* tilde */
++    0x2b,
++#else
++    0x29,
++#endif
++};
+ 
+-    switch(keycode) {
+-    case 0x00:
+-        /* sent when leaving window: reset the modifiers state */
+-        reset_keys();
+-        return;
+-    case 0x2a:                          /* Left Shift */
+-    case 0x36:                          /* Right Shift */
+-    case 0x1d:                          /* Left CTRL */
+-    case 0x9d:                          /* Right CTRL */
+-    case 0x38:                          /* Left ALT */
+-    case 0xb8:                         /* Right ALT */
+-        if (ev->type == SDL_KEYUP)
+-            modifiers_state[keycode] = 0;
+-        else
+-            modifiers_state[keycode] = 1;
+-        break;
+-    case 0x45: /* num lock */
+-    case 0x3a: /* caps lock */
+-        /* SDL does not send the key up event, so we generate it */
+-        kbd_put_keycode(keycode);
+-        kbd_put_keycode(keycode | 0x80);
+-        return;
+-    }
+ 
+-    /* now send the key code */
+-    if (keycode & 0x80)
+-        kbd_put_keycode(0xe0);
+-    if (ev->type == SDL_KEYUP)
+-        kbd_put_keycode(keycode | 0x80);
+-    else
+-        kbd_put_keycode(keycode & 0x7f);
+-}
++static const struct {
++    KeySym key;
++    unsigned scan_code;
++} scan_table2[] = {
++    { XK_BackSpace,     0x0e },
++    { XK_Tab,           0x0f },
++    { XK_Return,        0x1c },
++    { XK_Escape,        0x01 },
++    { XK_Delete,        0x53e0 },
+ 
+-static void sdl_update_caption(void)
+-{
+-    char buf[1024];
+-    strcpy(buf, "QEMU");
+-    if (!vm_running) {
+-        strcat(buf, " [Stopped]");
+-    }
+-    if (gui_grab) {
+-        strcat(buf, " - Press Ctrl-Alt to exit grab");
+-    }
+-    SDL_WM_SetCaption(buf, "QEMU");
+-}
++    { XK_Home,          0x47e0 },
++    { XK_Left,          0x4be0 },
++    { XK_Up,            0x48e0 },
++    { XK_Right,         0x4de0 },
++    { XK_Down,          0x50e0 },
++    { XK_Prior,         0x49e0 },
++    { XK_Next,          0x51e0 },
++    { XK_End,           0x4fe0 },
++    { XK_Insert,        0x52e0 },
++    { XK_Num_Lock,      0x45 },
+ 
+-static void sdl_grab_start(void)
+-{
+-    SDL_ShowCursor(0);
+-    SDL_WM_GrabInput(SDL_GRAB_ON);
+-    /* dummy read to avoid moving the mouse */
+-    SDL_GetRelativeMouseState(NULL, NULL);
+-    gui_grab = 1;
+-    sdl_update_caption();
+-}
++/* This block of codes is for Sun Type 4 keyboards... */
+ 
+-static void sdl_grab_end(void)
+-{
+-    SDL_WM_GrabInput(SDL_GRAB_OFF);
+-    SDL_ShowCursor(1);
+-    gui_grab = 0;
+-    sdl_update_caption();
+-}
++    { XK_F27,           0x47e0 },       /* Home/R7/F27 */
++    { XK_F29,           0x49e0 },       /* Prior/R9/F29 */
++    { XK_F35,           0x51e0 },       /* Next/R15/F35 */
++    { XK_F33,           0x4fe0 },       /* End/R13/F33 */
+ 
+-static void sdl_send_mouse_event(int dz)
+-{
+-    int dx, dy, state, buttons;
+-    state = SDL_GetRelativeMouseState(&dx, &dy);
+-    buttons = 0;
+-    if (state & SDL_BUTTON(SDL_BUTTON_LEFT))
+-        buttons |= MOUSE_EVENT_LBUTTON;
+-    if (state & SDL_BUTTON(SDL_BUTTON_RIGHT))
+-        buttons |= MOUSE_EVENT_RBUTTON;
+-    if (state & SDL_BUTTON(SDL_BUTTON_MIDDLE))
+-        buttons |= MOUSE_EVENT_MBUTTON;
+-    kbd_mouse_event(dx, dy, dz, buttons);
+-}
++    { XK_F25,           0x36e0 },       /* Keypad divide/R5/F25 */
++    { XK_F26,           0x37 },         /* Keypad multiply/R6/F26 */
+ 
+-static void toggle_full_screen(DisplayState *ds)
+-{
+-    gui_fullscreen = !gui_fullscreen;
+-    sdl_resize(ds, screen->w, screen->h);
+-    if (gui_fullscreen) {
+-        gui_saved_grab = gui_grab;
+-        sdl_grab_start();
+-    } else {
+-        if (!gui_saved_grab)
+-            sdl_grab_end();
+-    }
+-    vga_invalidate_display();
+-    vga_update_display();
+-}
++    { XK_F23,           0x46 },         /* Scroll lock/R3/F23 */
+ 
+-static void sdl_refresh(DisplayState *ds)
++    { XK_F31,           0x4c },         /* Keypad 5/R11/F31 */
++
++/* End of Sun type 4 codes */
++
++    { XK_KP_Enter,      0x1ce0 },
++    { XK_KP_Multiply,   0x37 },
++    { XK_KP_Add,        0x4e },
++    { XK_KP_Subtract,   0x4a },
++    { XK_KP_Divide,     0x36e0 },
++    { XK_KP_Decimal,    0x53 },
++
++    { XK_KP_0,          0x52 },
++    { XK_KP_1,          0x4f },
++    { XK_KP_2,          0x50 },
++    { XK_KP_3,          0x51 },
++    { XK_KP_4,          0x4b },
++    { XK_KP_5,          0x4c },
++    { XK_KP_6,          0x4d },
++    { XK_KP_7,          0x47 },
++    { XK_KP_8,          0x48 },
++    { XK_KP_9,          0x49 },
++
++    { XK_F1,            0x3b },
++    { XK_Help,          0x3b }, /* openwin mapped */
++    { XK_F2,            0x3c },
++    { XK_F3,            0x3d },
++    { XK_F4,            0x3e },
++    { XK_F5,            0x3f },
++    { XK_F19,           0x3c }, /* openwin mapped */
++    { XK_F20,           0x3d }, /* openwin mapped */
++    { XK_F16,           0x3e }, /* openwin mapped */
++    { XK_F18,           0x3f }, /* openwin mapped */
++    { XK_F6,            0x40 },
++    { XK_F7,            0x41 },
++    { XK_F8,            0x42 },
++    { XK_F9,            0x43 },
++    { XK_F10,           0x44 },
++    { XK_F11,           0x57 },
++    { XK_F12,           0x58 },
++
++    { XK_Shift_L,       0x2a },
++    { XK_Shift_R,       0x36 },
++    { XK_Control_L,     0x1d },
++    { XK_Control_R,     0x1de0 },
++    { XK_Meta_L,        0x38 },
++    { XK_Alt_L,         0x38 },
++    { XK_Meta_R,        0x38e0 },
++    { XK_Alt_R,         0x38e0 },
++
++    { XK_Scroll_Lock,   0x46 },
++    { XK_Caps_Lock,     0xba3a }
++};
++
++static void x_refresh(DisplayState *ds)
+ {
+-    SDL_Event ev1, *ev = &ev1;
+-    int mod_state;
+-                     
+-    if (last_vm_running != vm_running) {
+-        last_vm_running = vm_running;
+-        sdl_update_caption();
+-    }
++  XEvent report;
++  KeySym key;
++  int mouse_update = 0;
++  unsigned scan;
++  XButtonEvent *button_event;
++  XExposeEvent *expose_event;
++  int count;
++  static int gui_key_modifier_pressed;
+ 
+-    if (is_active_console(vga_console)) 
+-        vga_update_display();
++  if (last_vm_running != vm_running) {
++      last_vm_running = vm_running;
++      x_SetCaption();
++  }
+ 
+-    while (SDL_PollEvent(ev)) {
+-        switch (ev->type) {
+-        case SDL_VIDEOEXPOSE:
+-            sdl_update(ds, 0, 0, screen->w, screen->h);
+-            break;
+-        case SDL_KEYDOWN:
+-        case SDL_KEYUP:
+-            if (ev->type == SDL_KEYDOWN) {
+-                mod_state = (SDL_GetModState() & gui_grab_code) ==
+-                    gui_grab_code;
+-                gui_key_modifier_pressed = mod_state;
+-                if (gui_key_modifier_pressed) {
+-                    int keycode;
+-                    keycode = sdl_keyevent_to_keycode(&ev->key);
+-                    switch(keycode) {
+-                    case 0x21: /* 'f' key on US keyboard */
+-                        toggle_full_screen(ds);
+-                        gui_keysym = 1;
+-                        break;
+-                    case 0x02 ... 0x0a: /* '1' to '9' keys */ 
+-                        console_select(keycode - 0x02);
+-                        if (is_active_console(vga_console)) {
+-                            /* tell the vga console to redisplay itself */
+-                            vga_invalidate_display();
+-                        } else {
+-                            /* display grab if going to a text console */
+-                            if (gui_grab)
+-                                sdl_grab_end();
+-                        }
+-                        gui_keysym = 1;
+-                        break;
+-                    default:
+-                        break;
+-                    }
+-                } else if (!is_active_console(vga_console)) {
+-                    int keysym;
+-                    keysym = 0;
+-                    if (ev->key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)) {
+-                        switch(ev->key.keysym.sym) {
+-                        case SDLK_UP: keysym = QEMU_KEY_CTRL_UP; break;
+-                        case SDLK_DOWN: keysym = QEMU_KEY_CTRL_DOWN; break;
+-                        case SDLK_LEFT: keysym = QEMU_KEY_CTRL_LEFT; break;
+-                        case SDLK_RIGHT: keysym = QEMU_KEY_CTRL_RIGHT; break;
+-                        case SDLK_HOME: keysym = QEMU_KEY_CTRL_HOME; break;
+-                        case SDLK_END: keysym = QEMU_KEY_CTRL_END; break;
+-                        case SDLK_PAGEUP: keysym = QEMU_KEY_CTRL_PAGEUP; break;
+-                        case SDLK_PAGEDOWN: keysym = QEMU_KEY_CTRL_PAGEDOWN; break;
+-                        default: break;
+-                        }
+-                    } else {
+-                        switch(ev->key.keysym.sym) {
+-                        case SDLK_UP: keysym = QEMU_KEY_UP; break;
+-                        case SDLK_DOWN: keysym = QEMU_KEY_DOWN; break;
+-                        case SDLK_LEFT: keysym = QEMU_KEY_LEFT; break;
+-                        case SDLK_RIGHT: keysym = QEMU_KEY_RIGHT; break;
+-                        case SDLK_HOME: keysym = QEMU_KEY_HOME; break;
+-                        case SDLK_END: keysym = QEMU_KEY_END; break;
+-                        case SDLK_PAGEUP: keysym = QEMU_KEY_PAGEUP; break;
+-                        case SDLK_PAGEDOWN: keysym = QEMU_KEY_PAGEDOWN; break;
+-                        case SDLK_BACKSPACE: keysym = QEMU_KEY_BACKSPACE; break;                        case SDLK_DELETE: keysym = QEMU_KEY_DELETE; break;
+-                        default: break;
+-                        }
+-                    }
+-                    if (keysym) {
+-                        kbd_put_keysym(keysym);
+-                    } else if (ev->key.keysym.unicode != 0) {
+-                        kbd_put_keysym(ev->key.keysym.unicode);
+-                    }
+-                }
+-            } else if (ev->type == SDL_KEYUP) {
+-                mod_state = (ev->key.keysym.mod & gui_grab_code);
+-                if (!mod_state) {
+-                    if (gui_key_modifier_pressed) {
+-                        if (gui_keysym == 0) {
+-                            /* exit/enter grab if pressing Ctrl-Alt */
+-                            if (!gui_grab)
+-                                sdl_grab_start();
+-                            else
+-                                sdl_grab_end();
+-                            /* SDL does not send back all the
+-                               modifiers key, so we must correct it */
+-                            reset_keys();
+-                            break;
+-                        }
+-                        gui_key_modifier_pressed = 0;
+-                        gui_keysym = 0;
+-                    }
+-                }
+-            }
+-            if (is_active_console(vga_console)) 
+-                sdl_process_key(&ev->key);
+-            break;
+-        case SDL_QUIT:
+-            qemu_system_shutdown_request();
+-            break;
+-        case SDL_MOUSEMOTION:
+-            if (gui_grab) {
+-                sdl_send_mouse_event(0);
+-            }
+-            break;
+-        case SDL_MOUSEBUTTONDOWN:
+-        case SDL_MOUSEBUTTONUP:
+-            {
+-                SDL_MouseButtonEvent *bev = &ev->button;
+-                if (!gui_grab) {
+-                    if (ev->type == SDL_MOUSEBUTTONDOWN &&
+-                        (bev->state & SDL_BUTTON_LMASK)) {
+-                        /* start grabbing all events */
+-                        sdl_grab_start();
+-                    }
+-                } else {
+-                    int dz;
+-                    dz = 0;
+-#ifdef SDL_BUTTON_WHEELUP
+-                    if (bev->button == SDL_BUTTON_WHEELUP) {
+-                        dz = -1;
+-                    } else if (bev->button == SDL_BUTTON_WHEELDOWN) {
+-                        dz = 1;
+-                    }
+-#endif               
+-                    sdl_send_mouse_event(dz);
+-                }
+-            }
+-            break;
+-        case SDL_ACTIVEEVENT:
+-            if (gui_grab && (ev->active.gain & SDL_ACTIVEEVENTMASK) == 0 &&
+-                !gui_fullscreen_initial_grab) {
+-                sdl_grab_end();
+-            }
+-            break;
+-        default:
+-            break;
+-        }
++  if (is_active_console(vga_console))
++	vga_update_display();
++
++  while (XPending(qx_display) > 0)  {
++    XNextEvent(qx_display, &report);
++
++    switch  (report.type) {
++
++    case Expose:
++      expose_event = &report.xexpose;
++      x_update(ds, expose_event->x, expose_event->y, expose_event->width, expose_event->height);
++      break;
++
++    case ButtonPress:
++      button_event = (XButtonEvent *) &report;
++      current_x = button_event->x;
++      current_y = button_event->y;
++      switch (button_event->button) {
++	case Button1:
++	  if(!gui_grab) {
++		/* start grabbing all events */
++		trigger_mouse_grab();
++		break;
++	  }
++	  mouse_button_state |= 0x01;
++	  mouse_update = 1;
++	  break;
++	case Button2:
++	  mouse_button_state |= 0x04;
++	  mouse_update = 1;
++	  break;
++	case Button3:
++	  mouse_button_state |= 0x02;
++	  mouse_update = 1;
++	  break;
++	}
++      break;
++
++    case ButtonRelease:
++      button_event = (XButtonEvent *) &report;
++      current_x = button_event->x;
++      current_y = button_event->y;
++      switch (button_event->button) {
++	case Button1:
++	  mouse_button_state &= ~0x01;
++	  mouse_update = 1;
++	  break;
++	case Button2:
++	  mouse_button_state &= ~0x04;
++	  mouse_update = 1;
++	  break;
++	case Button3:
++	  mouse_button_state &= ~0x02;
++	  mouse_update = 1;
++	  break;
++	}
++      break;
++
++    case KeyPress:
++    case KeyRelease:
++      key = XLookupKeysym(&report.xkey, 0);
++
++      if(key == XK_Shift_L) {
++	if(report.type == KeyPress)
++		gui_key_modifier_pressed |= 5;
++	else
++		gui_key_modifier_pressed &= ~1;
++      } else if(key == XK_Control_L) {
++	if(report.type == KeyPress)
++		gui_key_modifier_pressed |= 6;
++	else
++		gui_key_modifier_pressed &= ~2;
++      }
++      if((gui_key_modifier_pressed & 7) == 7) {
++	trigger_mouse_grab();
++	gui_key_modifier_pressed &= ~4;
++	break;
++      }
++
++      /* XK_F21 is for sun type 4 keyboards.. */
++      if (key == XK_Break || key == XK_F21)
++	  key = XK_Pause;
++
++      if (key == XK_Pause) {
++	  if (report.xkey.state & ControlMask)
++	      scan = 0xc6e046e0;
++	  else
++	      scan = 0x451de1;
++      }                   /* XK_F22 is sun type 4 PrtScr */
++      else if (key == XK_Print || key == XK_F22) {
++	  if (report.xkey.state & Mod1Mask)
++	      scan = 0x54;
++	  else
++	      scan = 0x37e02ae0;
++      }
++#ifdef KBUK
++      else if ((key == XK_numbersign) && (report.xkey.state & ShiftMask))
++	  scan = 0x4;
++#endif
++      else if (key == XK_sterling)
++	  scan = 0x4;
++      else {
++	  if (key >= 0x20 && key <= 0x20+sizeof(scan_table1))
++		  scan = scan_table1[key - 0x20];
++	   else   {
++		  scan = 0;
++		  for (count = 0; count <
++		       (sizeof(scan_table2)/sizeof(scan_table2[0]));
++		       count++)
++			  if (scan_table2[count].key == key) {
++				  scan = scan_table2[count].scan_code;
++				  break;
++				  }
++		  }
++	  if (scan == 0)
++		  break;
++	  }
++      if (is_active_console(vga_console))
++	for (count = 0; scan; count++) {
++	  if (key != XK_Caps_Lock && report.type == KeyRelease)
++	      kbd_put_keycode(0x80 | (scan & 0xff));
++	  else
++	      kbd_put_keycode(scan & 0xff);
++
++	  scan >>= 8;
++	}
++      break;
++
++    case MotionNotify:
++      current_x = report.xmotion.x;
++      current_y = report.xmotion.y;
++      mouse_update = 1;
++      break;
++
++    default:
++      break;
++    } /* end switch */
++
++    if (mouse_update && gui_grab) {
++	send_keyboard_mouse_status();
++	mouse_update = 0;
+     }
++  } /* end while */
+ }
+ 
+-static void sdl_cleanup(void) 
++void X_display_init(DisplayState *ds, int full_screen)
+ {
+-    SDL_Quit();
+-}
++  Pixmap icon_pixmap;
++  XSizeHints size_hints;
++  XWMHints wm_hints;
++  XClassHint class_hints;
++  XSetWindowAttributes attr;
++  unsigned long valuemask = 0; /* ignore XGCvalues and use defaults */
++  XGCValues values;
++  char *progname = "qemu";
++  XEvent report;
+ 
+-void sdl_display_init(DisplayState *ds, int full_screen)
+-{
+-    int flags;
++  if ( (qx_display=XOpenDisplay(NULL)) == NULL ) {
++	fprintf(stderr, "Could not open X display\n");
++	exit(1);
++  }
++  /* get screen size from display structure macro */
++  q_x_screen_num = DefaultScreen(qx_display);
+ 
+-#if defined(__APPLE__)
+-    /* always use generic keymaps */
+-    if (!keyboard_layout)
+-        keyboard_layout = "en-us";
+-#endif
+-    if(keyboard_layout) {
+-        kbd_layout = init_keyboard_layout(keyboard_layout);
+-        if (!kbd_layout)
+-            exit(1);
+-    }
++  /* create opaque window */
++  win = XCreateSimpleWindow(qx_display, RootWindow(qx_display, q_x_screen_num),
++    0, 0,     /* x y  would be settable from the command line or resource database. */
++    720,      /* initial vga 80*25 9x16 */
++    400,
++    4,        /* border_width four pixels */
++    BlackPixel(qx_display, q_x_screen_num),
++    BlackPixel(qx_display, q_x_screen_num));
+ 
+-    flags = SDL_INIT_VIDEO | SDL_INIT_NOPARACHUTE;
+-    if (SDL_Init (flags)) {
+-        fprintf(stderr, "Could not initialize SDL - exiting\n");
+-        exit(1);
+-    }
+-#ifndef _WIN32
+-    /* NOTE: we still want Ctrl-C to work, so we undo the SDL redirections */
+-    signal(SIGINT, SIG_DFL);
+-    signal(SIGQUIT, SIG_DFL);
+-#endif
++  default_depth  = DefaultDepth(qx_display, q_x_screen_num);
++  default_visual = DefaultVisual(qx_display, q_x_screen_num);
+ 
+-    ds->dpy_update = sdl_update;
+-    ds->dpy_resize = sdl_resize;
+-    ds->dpy_refresh = sdl_refresh;
++  icon_pixmap = XCreateBitmapFromData(qx_display, win, icon_bits,
++					icon_width, icon_height);
+ 
+-    sdl_resize(ds, 640, 400);
+-    sdl_update_caption();
+-    SDL_EnableKeyRepeat(250, 50);
+-    SDL_EnableUNICODE(1);
+-    gui_grab = 0;
++  size_hints.flags =  PSize | PMinSize | PMaxSize;
++  size_hints.max_width = size_hints.min_width = 720;
++  size_hints.max_height = size_hints.min_height = 400;
+ 
+-    atexit(sdl_cleanup);
+-    if (full_screen) {
+-        gui_fullscreen = 1;
+-        gui_fullscreen_initial_grab = 1;
+-        sdl_grab_start();
+-    }
++  wm_hints.initial_state = NormalState;
++  wm_hints.input = True;
++  wm_hints.icon_pixmap = icon_pixmap;
++  wm_hints.flags = StateHint | IconPixmapHint | InputHint;
++
++  class_hints.res_name = "qemu";
++  class_hints.res_class = "Qemu";
++
++  XSetWMProperties(qx_display, win,
++		     NULL, NULL, // windowName iconName, set from x_SetCaption
++		     &progname, 1, &size_hints, &wm_hints,
++		     &class_hints);
++  // (attempt to) enable backing store
++  attr.save_under=1;
++  attr.backing_store=Always;
++  XChangeWindowAttributes(qx_display, win, CWSaveUnder|CWBackingStore, &attr);
++
++  XSelectInput(qx_display, win,
++		KeyPressMask | KeyReleaseMask |
++		ButtonPressMask | ButtonReleaseMask | PointerMotionMask |
++		ExposureMask| StructureNotifyMask);
++
++  gc = XCreateGC(qx_display, win, valuemask, &values);
++
++  XSetForeground(qx_display, gc, WhitePixel(qx_display, q_x_screen_num));
++  XSetBackground(qx_display, gc, BlackPixel(qx_display, q_x_screen_num));
++
++  /* Display window */
++  XMapWindow(qx_display, win);
++  XSync(qx_display, /* no discard */ 0);
++
++  while (1) {
++    XNextEvent(qx_display, &report);
++    if (report.type == MapNotify) break;
++  }
++  ds->dpy_update = x_update;
++  ds->dpy_resize = x_resize;
++  ds->dpy_refresh = x_refresh;
++  x_resize(ds, 720, 400);
++//  trigger_mouse_grab();
+ }

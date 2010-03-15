@@ -1,0 +1,22 @@
+--- qemu-0.12.2.a/configure	2010-02-02 17:41:58.000000000 +0100
++++ qemu-0.12.2.b/configure	2010-02-02 17:58:54.000000000 +0100
+@@ -1267,7 +1267,7 @@
+ if test "$curses" != "no" ; then
+   curses_found=no
+   cat > $TMPC << EOF
+-#include <curses.h>
++#include <ncurses/curses.h>
+ #ifdef __OpenBSD__
+ #define resize_term resizeterm
+ #endif
+--- qemu-0.12.2.a/curses.c	2010-02-02 18:29:18.000000000 +0100
++++ qemu-0.12.2.a/curses.c	2010-02-02 18:29:47.000000000 +0100
+@@ -21,7 +21,7 @@
+  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  * THE SOFTWARE.
+  */
+-#include <curses.h>
++#include <ncurses/curses.h>
+ 
+ #ifndef _WIN32
+ #include <signal.h>
