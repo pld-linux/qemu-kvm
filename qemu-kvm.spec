@@ -10,12 +10,12 @@
 Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
-Version:	0.12.3
-Release:	2
+Version:	0.12.4
+Release:	0.1
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	ab484975004f66fb48cb5589bd9b9dcb
+# Source0-md5:	1c48b94f58403fb24247f9b5fb6abb9f
 Patch0:		%{name}-ncurses.patch
 Patch1:		%{name}-nosdlgui.patch
 URL:		http://www.linux-kvm.org/
