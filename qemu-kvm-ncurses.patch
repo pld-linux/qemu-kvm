@@ -1,6 +1,7 @@
---- qemu-0.12.2.a/configure	2010-02-02 17:41:58.000000000 +0100
-+++ qemu-0.12.2.b/configure	2010-02-02 17:58:54.000000000 +0100
-@@ -1267,7 +1267,7 @@
+diff -urN qemu-kvm-0.14.0.orig/configure qemu-kvm-0.14.0/configure
+--- qemu-kvm-0.14.0.orig/configure	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/configure	2011-03-22 20:06:24.034161223 +0100
+@@ -1599,7 +1599,7 @@
  if test "$curses" != "no" ; then
    curses_found=no
    cat > $TMPC << EOF
@@ -9,8 +10,9 @@
  #ifdef __OpenBSD__
  #define resize_term resizeterm
  #endif
---- qemu-0.12.2.a/curses.c	2010-02-02 18:29:18.000000000 +0100
-+++ qemu-0.12.2.a/curses.c	2010-02-02 18:29:47.000000000 +0100
+diff -urN qemu-kvm-0.14.0.orig/ui/curses.c qemu-kvm-0.14.0/ui/curses.c
+--- qemu-kvm-0.14.0.orig/ui/curses.c	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/ui/curses.c	2011-03-22 20:06:50.748719754 +0100
 @@ -21,7 +21,7 @@
   * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   * THE SOFTWARE.
@@ -20,3 +22,24 @@
  
  #ifndef _WIN32
  #include <signal.h>
+diff -urN qemu-kvm-0.14.0.orig/ui/curses_keys.h qemu-kvm-0.14.0/ui/curses_keys.h
+--- qemu-kvm-0.14.0.orig/ui/curses_keys.h	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/ui/curses_keys.h	2011-03-22 20:07:20.206737431 +0100
+@@ -22,7 +22,7 @@
+  * THE SOFTWARE.
+  */
+ 
+-#include <curses.h>
++#include <ncurses/curses.h>
+ #include "keymaps.h"
+ 
+ 
+@@ -47,7 +47,7 @@
+ /* curses won't detect a Control + Alt + 1, so use Alt + 1 */
+ #define QEMU_KEY_CONSOLE0   (2 | ALT)   /* (curses2keycode['1'] | ALT) */
+ 
+-#define CURSES_KEYS         KEY_MAX     /* KEY_MAX defined in <curses.h> */
++#define CURSES_KEYS         KEY_MAX     /* KEY_MAX defined in </ncurses/curses.h> */
+ 
+ static const int curses2keysym[CURSES_KEYS] = {
+     [0 ... (CURSES_KEYS - 1)] = -1,
