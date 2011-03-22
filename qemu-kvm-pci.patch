@@ -1,0 +1,36 @@
+diff -urN qemu-kvm-0.14.0.orig/hw/pci.c qemu-kvm-0.14.0/hw/pci.c
+--- qemu-kvm-0.14.0.orig/hw/pci.c	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/hw/pci.c	2011-03-21 22:48:24.781586393 +0100
+@@ -29,7 +29,7 @@
+ #include "net.h"
+ #include "sysemu.h"
+ #include "loader.h"
+-#include "qemu-kvm.h"
++#include "kvm.h"
+ #include "hw/pc.h"
+ #include "device-assignment.h"
+ #include "qemu-objects.h"
+diff -urN qemu-kvm-0.14.0.orig/Makefile.objs qemu-kvm-0.14.0/Makefile.objs
+--- qemu-kvm-0.14.0.orig/Makefile.objs	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/Makefile.objs	2011-03-21 22:47:25.342208396 +0100
+@@ -170,7 +170,7 @@
+ hw-obj-y += loader.o
+ hw-obj-$(CONFIG_VIRTIO) += virtio.o virtio-console.o
+ hw-obj-y += fw_cfg.o
+-hw-obj-$(CONFIG_PCI) += pci_bridge.o
++hw-obj-$(CONFIG_PCI) += pci.o pci_bridge.o
+ hw-obj-$(CONFIG_PCI) += msix.o msi.o
+ hw-obj-$(CONFIG_PCI) += pci_host.o pcie_host.o
+ hw-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
+diff -urN qemu-kvm-0.14.0.orig/Makefile.target qemu-kvm-0.14.0/Makefile.target
+--- qemu-kvm-0.14.0.orig/Makefile.target	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/Makefile.target	2011-03-21 22:47:25.345541881 +0100
+@@ -195,7 +195,7 @@
+ # System emulator target
+ ifdef CONFIG_SOFTMMU
+ 
+-obj-y = arch_init.o cpus.o monitor.o pci.o machine.o gdbstub.o vl.o balloon.o
++obj-y = arch_init.o cpus.o monitor.o machine.o gdbstub.o vl.o balloon.o
+ # virtio has to be here due to weird dependency between PCI and virtio-net.
+ # need to fix this properly
+ obj-$(CONFIG_NO_PCI) += pci-stub.o
