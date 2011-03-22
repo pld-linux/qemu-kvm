@@ -10,14 +10,16 @@
 Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
-Version:	0.12.4
-Release:	0.1
+Version:	0.14.0
+Release:	1
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	1c48b94f58403fb24247f9b5fb6abb9f
+# Source0-md5:	4ea6f412d85a826e0b0690f5c4c59f13
 Patch0:		%{name}-ncurses.patch
 Patch1:		%{name}-nosdlgui.patch
+Patch2:		%{name}-pci.patch
+Patch3:		%{name}-whitelist.patch
 URL:		http://www.linux-kvm.org/
 BuildRequires:	SDL-devel >= 1.2.1
 BuildRequires:	alsa-lib-devel
@@ -78,6 +80,9 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
 %prep
 %setup -q
 %patch0 -p1
+%patch2 -p1
+%patch3 -p1
+
 %{?with_nosdlgui:%patch1 -p1}
 
 %{__sed} -i -e 's/sdl_static=yes/sdl_static=no/' configure
@@ -93,16 +98,15 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
 %build
 # --extra-cflags don't work (overridden by CFLAGS in Makefile*)
 # they can be passed if the cflags_passing bcond is used
-
 %ifarch %{ix86} x86_64
-./configure --target-list=x86_64-softmmu \
-		--prefix=%{_prefix} \
-		--audio-drv-list=pa,sdl,alsa,oss \
-		--block-drv-whitelist=bochs,cloop,cow,curl,dmg,nbd,parallels,qcow2,qcow,raw,vdi,vmdk,vpc,vvfat \
-		--disable-strip \
-		--extra-ldflags=$extraldflags \
-		--extra-cflags="$RPM_OPT_FLAGS" \
-		--disable-xen
+./configure \
+        --prefix=%{_prefix} \
+        --cc="%{__cc}" \
+        --host-cc="%{__cc}" \
+        --enable-mixemu \
+        --audio-drv-list="alsa" \
+        --interp-prefix=%{_libdir}/%{name}
+
 
 %{__make}
 
@@ -110,10 +114,10 @@ cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
 
 %{__make} clean
 
-cd kvm/user
-./configure --prefix=%{_prefix} --kerneldir=$(pwd)/../kernel/
-%{__make} kvmtrace
-cd ../../
+#cd kvm/user
+#./configure --prefix=%{_prefix} --kerneldir=$(pwd)/../kernel/
+#%{__make} kvmtrace
+#cd ../../
 %endif
 
 ./configure \
