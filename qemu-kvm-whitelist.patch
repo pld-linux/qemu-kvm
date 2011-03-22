@@ -1,0 +1,14 @@
+diff -urN qemu-kvm-0.14.0.orig/scripts/create_config qemu-kvm-0.14.0/scripts/create_config
+--- qemu-kvm-0.14.0.orig/scripts/create_config	2011-02-22 14:34:38.000000000 +0100
++++ qemu-kvm-0.14.0/scripts/create_config	2011-03-21 23:47:08.459245981 +0100
+@@ -33,7 +33,9 @@
+  CONFIG_BDRV_WHITELIST=*)
+     echo "#define CONFIG_BDRV_WHITELIST \\"
+     for drv in ${line#*=}; do
+-      echo "    \"${drv}\",\\"
++      if [ ! -z "$drv" ]; then
++        echo "    \"${drv}\",\\"
++      fi
+     done
+     echo "    NULL"
+     ;;
