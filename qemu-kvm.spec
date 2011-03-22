@@ -90,9 +90,9 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
 
 # cannot use optflags on x86 - they cause "no register to spill" errors
 %if %{with cflags_passing}
-%{__sed} -i -e 's/-Wall -O2 -g/-Wall %{rpmcflags}/' Makefile Makefile.target
+%{__sed} -i -e 's/-g $CFLAGS/-Wall %{rpmcflags}/' configure
 %else
-%{__sed} -i 's/-Wall -O2 -g/-Wall -O2/' Makefile Makefile.target
+%{__sed} -i 's/-g $CFLAGS/-Wall -fno-var-tracking-assignments/' configure
 %endif
 
 %build
