@@ -137,7 +137,7 @@ ln -s ../error.h qapi/error.h
 	--enable-smartcard \
 	--enable-guest-agent \
 	--enable-docs \
-	--audio-drv-list="alsa,oss,pa" \
+	--audio-drv-list="alsa,oss,pa,sdl" \
 	--audio-card-list="ac97,es1370,sb16,cs4231a,adlib,gus,hda" \
 	--interp-prefix=%{_prefix}/qemu-%%M \
 	%{__enable_disable spice} \
@@ -148,7 +148,6 @@ ln -s ../error.h qapi/error.h
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT%{_sysconfdir}/qemu
 
 %{__make} install \
 	V=99 \
