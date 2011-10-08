@@ -1,21 +1,25 @@
 #
 # TODO:
 # - update patches
+# - move qemu-ga to subpackage (works only on guest system)
 #
 # Conditional build:
 %bcond_with	cflags_passing		# with passing rpmcflags to Makefiles
 %bcond_with	dosguest		# add special patch when use with DOS as guest os
 %bcond_with	nosdlgui		# do not use SDL gui (use X11 instead)
-
+%bcond_without	spice			# SPICE support
+#
 Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	0.15.0
-Release:	2
+Release:	3
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
 # Source0-md5:	b45b0deebba4ce47dcaaab3807f6ed47
+Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
+# Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
 Patch0:		%{name}-ncurses.patch
 Patch1:		%{name}-nosdlgui.patch
 #Patch2:		%{name}-pci.patch
@@ -38,6 +42,10 @@ BuildRequires:	pulseaudio-devel
 # LinuxAIO support
 BuildRequires:	libaio-devel
 BuildRequires:	libevent-devel
+%if %{with spice}
+BuildRequires:	spice-protocol
+BuildRequires:	spice-server-devel
+%endif
 Requires:	SDL >= 1.2.1
 Obsoletes:	qemu
 # sparc is currently unsupported (missing cpu_get_real_ticks() impl in vl.c)
@@ -96,58 +104,57 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
 %{__sed} -i 's/-g $CFLAGS/-Wall -fno-var-tracking-assignments/' configure
 %endif
 
+cp -a %{SOURCE1} pc-bios/bios.bin
+
+# workaround for conflict with alsa/error.h
+ln -s ../error.h qapi/error.h
+
 %build
 # --extra-cflags don't work (overridden by CFLAGS in Makefile*)
 # they can be passed if the cflags_passing bcond is used
-%ifarch %{ix86} x86_64
 ./configure \
-        --prefix=%{_prefix} \
-        --cc="%{__cc}" \
-        --host-cc="%{__cc}" \
-        --enable-mixemu \
-        --audio-drv-list="alsa" \
-        --interp-prefix=%{_libdir}/%{name}
-
-
-%{__make}
-
-cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
-
-%{__make} clean
-
-#cd kvm/user
-#./configure --prefix=%{_prefix} --kerneldir=$(pwd)/../kernel/
-#%{__make} kvmtrace
-#cd ../../
-%endif
-
-./configure \
-	--target-list="i386-softmmu x86_64-softmmu arm-softmmu cris-softmmu m68k-softmmu \
-		mips-softmmu mipsel-softmmu mips64-softmmu mips64el-softmmu ppc-softmmu \
-		ppcemb-softmmu ppc64-softmmu sh4-softmmu sh4eb-softmmu sparc-softmmu \
-		i386-linux-user x86_64-linux-user alpha-linux-user arm-linux-user \
-		armeb-linux-user cris-linux-user m68k-linux-user mips-linux-user \
-		mipsel-linux-user ppc-linux-user ppc64-linux-user ppc64abi32-linux-user \
-		sh4-linux-user sh4eb-linux-user sparc-linux-user sparc64-linux-user \
-		sparc32plus-linux-user" \
+	--target-list="" \
 	--prefix=%{_prefix} \
+	--sysconfdir=%{_sysconfdir} \
+	--cc="%{__cc}" \
+	--host-cc="%{__cc}" \
+	--enable-vnc \
+	--enable-vnc-tls \
+	--enable-vnc-sasl \
+	--enable-vnc-jpeg \
+	--enable-vnc-png \
+	--enable-vnc-thread \
+	--enable-curses \
+	--enable-bluez \
+	--enable-kvm-device-assignment \
+	--enable-kvm-pit \
+	--enable-system \
+	--enable-user \
+	--enable-mixemu \
+	--enable-uuid \
+	--enable-attr \
+	--enable-vhost-net \
+	--enable-smartcard \
+	--enable-guest-agent \
+	--enable-docs \
+	--audio-drv-list="alsa,oss,pa" \
+	--audio-card-list="ac97,es1370,sb16,cs4231a,adlib,gus,hda" \
 	--interp-prefix=%{_prefix}/qemu-%%M \
-	--audio-drv-list=pa,sdl,alsa,oss \
-	--block-drv-whitelist=bochs,cloop,cow,curl,dmg,nbd,parallels,qcow2,qcow,raw,vdi,vmdk,vpc,vvfat \
-	--disable-kvm \
+	%{__enable_disable spice} \
 	--disable-strip \
-	--extra-ldflags=$extraldflags \
-	--extra-cflags="$RPM_OPT_FLAGS" \
-	--disable-xen
+	--disable-usb-redir
 
-%{__make}
+%{__make} V=99
 
 %install
 rm -rf $RPM_BUILD_ROOT
+install -d $RPM_BUILD_ROOT%{_sysconfdir}/qemu
 
 %{__make} install \
+	V=99 \
 	DESTDIR=$RPM_BUILD_ROOT
-install qemu-kvm $RPM_BUILD_ROOT/%{_bindir}
+
+ln -s qemu-system-x86_64 $RPM_BUILD_ROOT%{_bindir}/qemu-kvm
 
 install -d $RPM_BUILD_ROOT%{_sysconfdir}
 cat <<'EOF' > $RPM_BUILD_ROOT%{_sysconfdir}/qemu-ifup
@@ -165,7 +172,54 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(644,root,root,755)
 %doc README qemu-doc.html qemu-tech.html
 %attr(755,root,root) %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/qemu-ifup
-%attr(755,root,root) %{_bindir}/*
+%dir %{_sysconfdir}/qemu
+%attr(755,root,root) %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/qemu/target-*.conf
+%attr(755,root,root) %{_bindir}/qemu
+%attr(755,root,root) %{_bindir}/qemu-alpha
+%attr(755,root,root) %{_bindir}/qemu-arm
+%attr(755,root,root) %{_bindir}/qemu-armeb
+%attr(755,root,root) %{_bindir}/qemu-cris
+%attr(755,root,root) %{_bindir}/qemu-ga
+%attr(755,root,root) %{_bindir}/qemu-i386
+%attr(755,root,root) %{_bindir}/qemu-img
+%attr(755,root,root) %{_bindir}/qemu-io
+%attr(755,root,root) %{_bindir}/qemu-kvm
+%attr(755,root,root) %{_bindir}/qemu-m68k
+%attr(755,root,root) %{_bindir}/qemu-microblaze
+%attr(755,root,root) %{_bindir}/qemu-microblazeel
+%attr(755,root,root) %{_bindir}/qemu-mips
+%attr(755,root,root) %{_bindir}/qemu-mipsel
+%attr(755,root,root) %{_bindir}/qemu-nbd
+%attr(755,root,root) %{_bindir}/qemu-ppc
+%attr(755,root,root) %{_bindir}/qemu-ppc64
+%attr(755,root,root) %{_bindir}/qemu-ppc64abi32
+%attr(755,root,root) %{_bindir}/qemu-s390x
+%attr(755,root,root) %{_bindir}/qemu-sh4
+%attr(755,root,root) %{_bindir}/qemu-sh4eb
+%attr(755,root,root) %{_bindir}/qemu-sparc
+%attr(755,root,root) %{_bindir}/qemu-sparc32plus
+%attr(755,root,root) %{_bindir}/qemu-sparc64
+%attr(755,root,root) %{_bindir}/qemu-system-arm
+%attr(755,root,root) %{_bindir}/qemu-system-cris
+%attr(755,root,root) %{_bindir}/qemu-system-lm32
+%attr(755,root,root) %{_bindir}/qemu-system-m68k
+%attr(755,root,root) %{_bindir}/qemu-system-microblaze
+%attr(755,root,root) %{_bindir}/qemu-system-microblazeel
+%attr(755,root,root) %{_bindir}/qemu-system-mips
+%attr(755,root,root) %{_bindir}/qemu-system-mips64
+%attr(755,root,root) %{_bindir}/qemu-system-mips64el
+%attr(755,root,root) %{_bindir}/qemu-system-mipsel
+%attr(755,root,root) %{_bindir}/qemu-system-ppc
+%attr(755,root,root) %{_bindir}/qemu-system-ppc64
+%attr(755,root,root) %{_bindir}/qemu-system-ppcemb
+%attr(755,root,root) %{_bindir}/qemu-system-s390x
+%attr(755,root,root) %{_bindir}/qemu-system-sh4
+%attr(755,root,root) %{_bindir}/qemu-system-sh4eb
+%attr(755,root,root) %{_bindir}/qemu-system-sparc
+%attr(755,root,root) %{_bindir}/qemu-system-sparc64
+%attr(755,root,root) %{_bindir}/qemu-system-x86_64
+%attr(755,root,root) %{_bindir}/qemu-unicore32
+%attr(755,root,root) %{_bindir}/qemu-x86_64
 %{_datadir}/qemu
 %{_mandir}/man1/qemu.1*
 %{_mandir}/man1/qemu-img.1*
