@@ -13,7 +13,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	0.15.0
-Release:	3
+Release:	4
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
@@ -47,7 +47,8 @@ BuildRequires:	spice-protocol
 BuildRequires:	spice-server-devel
 %endif
 Requires:	SDL >= 1.2.1
-Obsoletes:	qemu
+Obsoletes:	qemu < %{version}
+Provides:	qemu = %{version}-%{release}
 # sparc is currently unsupported (missing cpu_get_real_ticks() impl in vl.c)
 ExclusiveArch:	%{ix86} %{x8664} %{?with_userspace:ppc}
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
