@@ -12,17 +12,15 @@
 Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
-Version:	0.15.1
-Release:	2
+Version:	1.0
+Release:	0.1
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	8800a7d6b3aa4a168ea7f78dc66c0320
+# Source0-md5:	00a825db46a70ba8ef9fc95da9cc7c1e
 Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
 # Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
 Patch0:		%{name}-ncurses.patch
-Patch1:		%{name}-nosdlgui.patch
-#Patch2:		%{name}-pci.patch
 Patch3:		%{name}-whitelist.patch
 URL:		http://www.linux-kvm.org/
 BuildRequires:	SDL-devel >= 1.2.1
@@ -90,7 +88,6 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
 %prep
 %setup -q
 %patch0 -p1
-#%patch2 -p1
 %patch3 -p1
 
 %{?with_nosdlgui:%patch1 -p1}
