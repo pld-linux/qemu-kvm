@@ -46,6 +46,7 @@ BuildRequires:	spice-server-devel
 %endif
 Requires:	SDL >= 1.2.1
 Obsoletes:	qemu < %{version}
+Obsoletes:	kvm
 Provides:	qemu = %{version}-%{release}
 # sparc is currently unsupported (missing cpu_get_real_ticks() impl in vl.c)
 ExclusiveArch:	%{ix86} %{x8664} %{?with_userspace:ppc}
