@@ -117,7 +117,7 @@ nothing () {
 }
 
 loop () {
-    trap nothing SIGUSR1
+    trap nothing USR1
     while true
     do
         sleep $KSM_MONITOR_INTERVAL &
