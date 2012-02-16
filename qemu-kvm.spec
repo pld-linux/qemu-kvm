@@ -352,6 +352,10 @@ fi
 %systemd_reload
 %systemd_post systemd-binfmt.service
 
+%triggerpostun -- %{name} < 1.0
+%systemd_trigger ksm.service
+%systemd_trigger ksmtuned.service
+
 %post guest-agent
 %systemd_reload
 
