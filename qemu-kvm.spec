@@ -12,7 +12,8 @@ Version:	1.0
 Release:	0.1
 License:	GPL
 Group:		Applications/Emulators
-Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
+#Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
+Source0:	%{name}-%{version}.tar.gz
 # Source0-md5:	00a825db46a70ba8ef9fc95da9cc7c1e
 Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
 # Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
