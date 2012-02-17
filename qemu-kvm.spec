@@ -84,13 +84,17 @@ BuildRequires:	libaio-devel
 BuildRequires:	libevent-devel
 # For FDT device tree support
 BuildRequires:	libfdt-devel
+BuildRequires:	rpmbuild(macros) >= 1.644
 %if %{with spice}
 BuildRequires:	spice-protocol
 BuildRequires:	spice-server-devel
 %endif
 Requires(postun):	/usr/sbin/groupdel
+Requires(postun):	/usr/sbin/userdel
+Requires(pre):	/bin/id
 Requires(pre):	/usr/bin/getgid
 Requires(pre):	/usr/sbin/groupadd
+Requires(pre):	/usr/sbin/useradd
 Provides:	group(kvm)
 Requires:	SDL >= 1.2.1
 Requires:	systemd >= 38
@@ -335,6 +339,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %pre
 %groupadd -g 160 kvm
+%groupadd -g 276 qemu
+%useradd -u 276 -g qemu -G kvm -c "QEMU User" qemu
 
 %post
 %systemd_post ksm.service
@@ -347,6 +353,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %postun
 if [ "$1" = "0" ]; then
+	%userremove qemu
+	%groupremove qemu
 	%groupremove kvm
 fi
 %systemd_reload
