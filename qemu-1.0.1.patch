@@ -1,0 +1,2131 @@
+diff -urN qemu-1.0/block/rbd.c qemu-1.0.1/block/rbd.c
+--- qemu-1.0/block/rbd.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/block/rbd.c	2012-02-17 20:45:39.000000000 +0100
+@@ -808,7 +808,7 @@
+     } while (snap_count == -ERANGE);
+ 
+     if (snap_count <= 0) {
+-        return snap_count;
++        goto done;
+     }
+ 
+     sn_tab = g_malloc0(snap_count * sizeof(QEMUSnapshotInfo));
+@@ -827,6 +827,7 @@
+     }
+     rbd_snap_list_end(snaps);
+ 
++ done:
+     *psn_tab = sn_tab;
+     return snap_count;
+ }
+diff -urN qemu-1.0/configure qemu-1.0.1/configure
+--- qemu-1.0/configure	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/configure	2012-02-17 20:45:39.000000000 +0100
+@@ -1116,7 +1116,7 @@
+ 
+ if test "$pie" = ""; then
+   case "$cpu-$targetos" in
+-    i386-Linux|x86_64-Linux)
++    i386-Linux|x86_64-Linux|i386-OpenBSD|x86_64-OpenBSD)
+       ;;
+     *)
+       pie="no"
+diff -urN qemu-1.0/console.c qemu-1.0.1/console.c
+--- qemu-1.0/console.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/console.c	2012-02-17 20:45:39.000000000 +0100
+@@ -186,7 +186,9 @@
+         consoles[0]->hw_screen_dump(consoles[0]->hw, filename);
+     }
+ 
+-    console_select(previous_active_console->index);
++    if (previous_active_console) {
++        console_select(previous_active_console->index);
++    }
+ }
+ 
+ void vga_hw_text_update(console_ch_t *chardata)
+diff -urN qemu-1.0/coroutine-ucontext.c qemu-1.0.1/coroutine-ucontext.c
+--- qemu-1.0/coroutine-ucontext.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/coroutine-ucontext.c	2012-02-17 20:45:39.000000000 +0100
+@@ -35,6 +35,10 @@
+     POOL_MAX_SIZE = 64,
+ };
+ 
++/** Free list to speed up creation */
++static QLIST_HEAD(, Coroutine) pool = QLIST_HEAD_INITIALIZER(pool);
++static unsigned int pool_size;
++
+ typedef struct {
+     Coroutine base;
+     void *stack;
+@@ -48,10 +52,6 @@
+     /** Currently executing coroutine */
+     Coroutine *current;
+ 
+-    /** Free list to speed up creation */
+-    QLIST_HEAD(, Coroutine) pool;
+-    unsigned int pool_size;
+-
+     /** The default coroutine */
+     CoroutineUContext leader;
+ } CoroutineThreadState;
+@@ -75,7 +75,6 @@
+     if (!s) {
+         s = g_malloc0(sizeof(*s));
+         s->current = &s->leader.base;
+-        QLIST_INIT(&s->pool);
+         pthread_setspecific(thread_state_key, s);
+     }
+     return s;
+@@ -84,14 +83,19 @@
+ static void qemu_coroutine_thread_cleanup(void *opaque)
+ {
+     CoroutineThreadState *s = opaque;
++
++    g_free(s);
++}
++
++static void __attribute__((destructor)) coroutine_cleanup(void)
++{
+     Coroutine *co;
+     Coroutine *tmp;
+ 
+-    QLIST_FOREACH_SAFE(co, &s->pool, pool_next, tmp) {
++    QLIST_FOREACH_SAFE(co, &pool, pool_next, tmp) {
+         g_free(DO_UPCAST(CoroutineUContext, base, co)->stack);
+         g_free(co);
+     }
+-    g_free(s);
+ }
+ 
+ static void __attribute__((constructor)) coroutine_init(void)
+@@ -169,13 +173,12 @@
+ 
+ Coroutine *qemu_coroutine_new(void)
+ {
+-    CoroutineThreadState *s = coroutine_get_thread_state();
+     Coroutine *co;
+ 
+-    co = QLIST_FIRST(&s->pool);
++    co = QLIST_FIRST(&pool);
+     if (co) {
+         QLIST_REMOVE(co, pool_next);
+-        s->pool_size--;
++        pool_size--;
+     } else {
+         co = coroutine_new();
+     }
+@@ -184,13 +187,12 @@
+ 
+ void qemu_coroutine_delete(Coroutine *co_)
+ {
+-    CoroutineThreadState *s = coroutine_get_thread_state();
+     CoroutineUContext *co = DO_UPCAST(CoroutineUContext, base, co_);
+ 
+-    if (s->pool_size < POOL_MAX_SIZE) {
+-        QLIST_INSERT_HEAD(&s->pool, &co->base, pool_next);
++    if (pool_size < POOL_MAX_SIZE) {
++        QLIST_INSERT_HEAD(&pool, &co->base, pool_next);
+         co->base.caller = NULL;
+-        s->pool_size++;
++        pool_size++;
+         return;
+     }
+ 
+diff -urN qemu-1.0/cpu-common.h qemu-1.0.1/cpu-common.h
+--- qemu-1.0/cpu-common.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/cpu-common.h	2012-02-17 20:45:39.000000000 +0100
+@@ -172,6 +172,7 @@
+ #define IO_MEM_ROM         (1 << IO_MEM_SHIFT) /* hardcoded offset */
+ #define IO_MEM_UNASSIGNED  (2 << IO_MEM_SHIFT)
+ #define IO_MEM_NOTDIRTY    (3 << IO_MEM_SHIFT)
++#define IO_MEM_SUBPAGE_RAM (4 << IO_MEM_SHIFT)
+ 
+ /* Acts like a ROM when read and like a device when written.  */
+ #define IO_MEM_ROMD        (1)
+diff -urN qemu-1.0/cutils.c qemu-1.0.1/cutils.c
+--- qemu-1.0/cutils.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/cutils.c	2012-02-17 20:45:39.000000000 +0100
+@@ -217,7 +217,10 @@
+ {
+     assert(qiov->nalloc != -1);
+ 
++    qemu_iovec_reset(qiov);
+     g_free(qiov->iov);
++    qiov->nalloc = 0;
++    qiov->iov = NULL;
+ }
+ 
+ void qemu_iovec_reset(QEMUIOVector *qiov)
+diff -urN qemu-1.0/exec.c qemu-1.0.1/exec.c
+--- qemu-1.0/exec.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/exec.c	2012-02-17 20:45:39.000000000 +0100
+@@ -3570,6 +3570,63 @@
+     &subpage_writel,
+ };
+ 
++static uint32_t subpage_ram_readb(void *opaque, target_phys_addr_t addr)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    return ldub_p(ptr);
++}
++
++static void subpage_ram_writeb(void *opaque, target_phys_addr_t addr,
++                               uint32_t value)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    stb_p(ptr, value);
++}
++
++static uint32_t subpage_ram_readw(void *opaque, target_phys_addr_t addr)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    return lduw_p(ptr);
++}
++
++static void subpage_ram_writew(void *opaque, target_phys_addr_t addr,
++                               uint32_t value)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    stw_p(ptr, value);
++}
++
++static uint32_t subpage_ram_readl(void *opaque, target_phys_addr_t addr)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    return ldl_p(ptr);
++}
++
++static void subpage_ram_writel(void *opaque, target_phys_addr_t addr,
++                               uint32_t value)
++{
++    ram_addr_t raddr = addr;
++    void *ptr = qemu_get_ram_ptr(raddr);
++    stl_p(ptr, value);
++}
++
++static CPUReadMemoryFunc * const subpage_ram_read[] = {
++    &subpage_ram_readb,
++    &subpage_ram_readw,
++    &subpage_ram_readl,
++};
++
++static CPUWriteMemoryFunc * const subpage_ram_write[] = {
++    &subpage_ram_writeb,
++    &subpage_ram_writew,
++    &subpage_ram_writel,
++};
++
+ static int subpage_register (subpage_t *mmio, uint32_t start, uint32_t end,
+                              ram_addr_t memory, ram_addr_t region_offset)
+ {
+@@ -3583,8 +3640,9 @@
+     printf("%s: %p start %08x end %08x idx %08x eidx %08x mem %ld\n", __func__,
+            mmio, start, end, idx, eidx, memory);
+ #endif
+-    if ((memory & ~TARGET_PAGE_MASK) == IO_MEM_RAM)
+-        memory = IO_MEM_UNASSIGNED;
++    if ((memory & ~TARGET_PAGE_MASK) == IO_MEM_RAM) {
++        memory = IO_MEM_SUBPAGE_RAM;
++    }
+     memory = (memory >> IO_MEM_SHIFT) & (IO_MEM_NB_ENTRIES - 1);
+     for (; idx <= eidx; idx++) {
+         mmio->sub_io_index[idx] = memory;
+@@ -3817,6 +3875,9 @@
+     cpu_register_io_memory_fixed(IO_MEM_NOTDIRTY, error_mem_read,
+                                  notdirty_mem_write, NULL,
+                                  DEVICE_NATIVE_ENDIAN);
++    cpu_register_io_memory_fixed(IO_MEM_SUBPAGE_RAM, subpage_ram_read,
++                                 subpage_ram_write, NULL,
++                                 DEVICE_NATIVE_ENDIAN);
+     for (i=0; i<5; i++)
+         io_mem_used[i] = 1;
+ 
+diff -urN qemu-1.0/fsdev/file-op-9p.h qemu-1.0.1/fsdev/file-op-9p.h
+--- qemu-1.0/fsdev/file-op-9p.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/fsdev/file-op-9p.h	2012-02-17 20:45:39.000000000 +0100
+@@ -74,7 +74,7 @@
+ } FsContext;
+ 
+ typedef struct V9fsPath {
+-    int16_t size;
++    uint16_t size;
+     char *data;
+ } V9fsPath;
+ 
+@@ -112,10 +112,10 @@
+     ssize_t (*pwritev)(FsContext *, V9fsFidOpenState *,
+                        const struct iovec *, int, off_t);
+     int (*mkdir)(FsContext *, V9fsPath *, const char *, FsCred *);
+-    int (*fstat)(FsContext *, V9fsFidOpenState *, struct stat *);
++    int (*fstat)(FsContext *, int, V9fsFidOpenState *, struct stat *);
+     int (*rename)(FsContext *, const char *, const char *);
+     int (*truncate)(FsContext *, V9fsPath *, off_t);
+-    int (*fsync)(FsContext *, V9fsFidOpenState *, int);
++    int (*fsync)(FsContext *, int, V9fsFidOpenState *, int);
+     int (*statfs)(FsContext *s, V9fsPath *path, struct statfs *stbuf);
+     ssize_t (*lgetxattr)(FsContext *, V9fsPath *,
+                          const char *, void *, size_t);
+diff -urN qemu-1.0/fsdev/qemu-fsdev.c qemu-1.0.1/fsdev/qemu-fsdev.c
+--- qemu-1.0/fsdev/qemu-fsdev.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/fsdev/qemu-fsdev.c	2012-02-17 20:45:39.000000000 +0100
+@@ -23,7 +23,9 @@
+ 
+ static FsDriverTable FsDrivers[] = {
+     { .name = "local", .ops = &local_ops},
++#ifdef CONFIG_OPEN_BY_HANDLE
+     { .name = "handle", .ops = &handle_ops},
++#endif
+     { .name = "synth", .ops = &synth_ops},
+ };
+ 
+diff -urN qemu-1.0/hw/9pfs/cofile.c qemu-1.0.1/hw/9pfs/cofile.c
+--- qemu-1.0/hw/9pfs/cofile.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/cofile.c	2012-02-17 20:45:39.000000000 +0100
+@@ -71,7 +71,7 @@
+     }
+     v9fs_co_run_in_worker(
+         {
+-            err = s->ops->fstat(&s->ctx, &fidp->fs, stbuf);
++            err = s->ops->fstat(&s->ctx, fidp->fid_type, &fidp->fs, stbuf);
+             if (err < 0) {
+                 err = -errno;
+             }
+@@ -192,7 +192,7 @@
+     }
+     v9fs_co_run_in_worker(
+         {
+-            err = s->ops->fsync(&s->ctx, &fidp->fs, datasync);
++            err = s->ops->fsync(&s->ctx, fidp->fid_type, &fidp->fs, datasync);
+             if (err < 0) {
+                 err = -errno;
+             }
+diff -urN qemu-1.0/hw/9pfs/virtio-9p.c qemu-1.0.1/hw/9pfs/virtio-9p.c
+--- qemu-1.0/hw/9pfs/virtio-9p.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p.c	2012-02-17 20:45:39.000000000 +0100
+@@ -23,6 +23,7 @@
+ #include "virtio-9p-xattr.h"
+ #include "virtio-9p-coth.h"
+ #include "trace.h"
++#include "migration.h"
+ 
+ int open_fd_hw;
+ int total_open_fd;
+@@ -373,6 +374,19 @@
+      * Don't free the fid if it is in reclaim list
+      */
+     if (!fidp->ref && fidp->clunked) {
++        if (fidp->fid == pdu->s->root_fid) {
++            /*
++             * if the clunked fid is root fid then we
++             * have unmounted the fs on the client side.
++             * delete the migration blocker. Ideally, this
++             * should be hooked to transport close notification
++             */
++            if (pdu->s->migration_blocker) {
++                migrate_del_blocker(pdu->s->migration_blocker);
++                error_free(pdu->s->migration_blocker);
++                pdu->s->migration_blocker = NULL;
++            }
++        }
+         free_fid(pdu, fidp);
+     }
+ }
+@@ -509,6 +523,30 @@
+     return 0;
+ }
+ 
++static void virtfs_reset(V9fsPDU *pdu)
++{
++    V9fsState *s = pdu->s;
++    V9fsFidState *fidp = NULL;
++
++    /* Free all fids */
++    while (s->fid_list) {
++        fidp = s->fid_list;
++        s->fid_list = fidp->next;
++
++        if (fidp->ref) {
++            fidp->clunked = 1;
++        } else {
++            free_fid(pdu, fidp);
++        }
++    }
++    if (fidp) {
++        /* One or more unclunked fids found... */
++        error_report("9pfs:%s: One or more uncluncked fids "
++                     "found during reset", __func__);
++    }
++    return;
++}
++
+ #define P9_QID_TYPE_DIR         0x80
+ #define P9_QID_TYPE_SYMLINK     0x02
+ 
+@@ -636,40 +674,6 @@
+                              offset, size, 1);
+ }
+ 
+-static int pdu_copy_sg(V9fsPDU *pdu, size_t offset, int rx, struct iovec *sg)
+-{
+-    size_t pos = 0;
+-    int i, j;
+-    struct iovec *src_sg;
+-    unsigned int num;
+-
+-    if (rx) {
+-        src_sg = pdu->elem.in_sg;
+-        num = pdu->elem.in_num;
+-    } else {
+-        src_sg = pdu->elem.out_sg;
+-        num = pdu->elem.out_num;
+-    }
+-
+-    j = 0;
+-    for (i = 0; i < num; i++) {
+-        if (offset <= pos) {
+-            sg[j].iov_base = src_sg[i].iov_base;
+-            sg[j].iov_len = src_sg[i].iov_len;
+-            j++;
+-        } else if (offset < (src_sg[i].iov_len + pos)) {
+-            sg[j].iov_base = src_sg[i].iov_base;
+-            sg[j].iov_len = src_sg[i].iov_len;
+-            sg[j].iov_base += (offset - pos);
+-            sg[j].iov_len -= (offset - pos);
+-            j++;
+-        }
+-        pos += src_sg[i].iov_len;
+-    }
+-
+-    return j;
+-}
+-
+ static size_t pdu_unmarshal(V9fsPDU *pdu, size_t offset, const char *fmt, ...)
+ {
+     size_t old_offset = offset;
+@@ -705,12 +709,6 @@
+             *valp = le64_to_cpu(val);
+             break;
+         }
+-        case 'v': {
+-            struct iovec *iov = va_arg(ap, struct iovec *);
+-            int *iovcnt = va_arg(ap, int *);
+-            *iovcnt = pdu_copy_sg(pdu, offset, 0, iov);
+-            break;
+-        }
+         case 's': {
+             V9fsString *str = va_arg(ap, V9fsString *);
+             offset += pdu_unmarshal(pdu, offset, "w", &str->size);
+@@ -789,12 +787,6 @@
+             offset += pdu_pack(pdu, offset, &val, sizeof(val));
+             break;
+         }
+-        case 'v': {
+-            struct iovec *iov = va_arg(ap, struct iovec *);
+-            int *iovcnt = va_arg(ap, int *);
+-            *iovcnt = pdu_copy_sg(pdu, offset, 1, iov);
+-            break;
+-        }
+         case 's': {
+             V9fsString *str = va_arg(ap, V9fsString *);
+             offset += pdu_marshal(pdu, offset, "w", str->size);
+@@ -1105,42 +1097,6 @@
+     stat_to_qid(stbuf, &v9lstat->qid);
+ }
+ 
+-static struct iovec *adjust_sg(struct iovec *sg, int len, int *iovcnt)
+-{
+-    while (len && *iovcnt) {
+-        if (len < sg->iov_len) {
+-            sg->iov_len -= len;
+-            sg->iov_base += len;
+-            len = 0;
+-        } else {
+-            len -= sg->iov_len;
+-            sg++;
+-            *iovcnt -= 1;
+-        }
+-    }
+-
+-    return sg;
+-}
+-
+-static struct iovec *cap_sg(struct iovec *sg, int cap, int *cnt)
+-{
+-    int i;
+-    int total = 0;
+-
+-    for (i = 0; i < *cnt; i++) {
+-        if ((total + sg[i].iov_len) > cap) {
+-            sg[i].iov_len -= ((total + sg[i].iov_len) - cap);
+-            i++;
+-            break;
+-        }
+-        total += sg[i].iov_len;
+-    }
+-
+-    *cnt = i;
+-
+-    return sg;
+-}
+-
+ static void print_sg(struct iovec *sg, int cnt)
+ {
+     int i;
+@@ -1182,6 +1138,8 @@
+     pdu_unmarshal(pdu, offset, "ds", &s->msize, &version);
+     trace_v9fs_version(pdu->tag, pdu->id, s->msize, version.data);
+ 
++    virtfs_reset(pdu);
++
+     if (!strcmp(version.data, "9P2000.u")) {
+         s->proto_version = V9FS_PROTO_2000U;
+     } else if (!strcmp(version.data, "9P2000.L")) {
+@@ -1235,6 +1193,11 @@
+     err = offset;
+     trace_v9fs_attach_return(pdu->tag, pdu->id,
+                              qid.type, qid.version, qid.path);
++    s->root_fid = fid;
++    /* disable migration */
++    error_set(&s->migration_blocker, QERR_VIRTFS_FEATURE_BLOCKS_MIGRATION,
++              s->ctx.fs_root, s->tag);
++    migrate_add_blocker(s->migration_blocker);
+ out:
+     put_fid(pdu, fidp);
+ out_nofid:
+@@ -1731,8 +1694,8 @@
+     complete_pdu(s, pdu, err);
+ }
+ 
+-static int v9fs_xattr_read(V9fsState *s, V9fsPDU *pdu,
+-                           V9fsFidState *fidp, int64_t off, int32_t max_count)
++static int v9fs_xattr_read(V9fsState *s, V9fsPDU *pdu, V9fsFidState *fidp,
++                           uint64_t off, uint32_t max_count)
+ {
+     size_t offset = 7;
+     int read_count;
+@@ -1756,7 +1719,7 @@
+ }
+ 
+ static int v9fs_do_readdir_with_stat(V9fsPDU *pdu,
+-                                     V9fsFidState *fidp, int32_t max_count)
++                                     V9fsFidState *fidp, uint32_t max_count)
+ {
+     V9fsPath path;
+     V9fsStat v9stat;
+@@ -1816,14 +1779,46 @@
+     return count;
+ }
+ 
++/*
++ * Create a QEMUIOVector for a sub-region of PDU iovecs
++ *
++ * @qiov:       uninitialized QEMUIOVector
++ * @skip:       number of bytes to skip from beginning of PDU
++ * @size:       number of bytes to include
++ * @is_write:   true - write, false - read
++ *
++ * The resulting QEMUIOVector has heap-allocated iovecs and must be cleaned up
++ * with qemu_iovec_destroy().
++ */
++static void v9fs_init_qiov_from_pdu(QEMUIOVector *qiov, V9fsPDU *pdu,
++                                    uint64_t skip, size_t size,
++                                    bool is_write)
++{
++    QEMUIOVector elem;
++    struct iovec *iov;
++    unsigned int niov;
++
++    if (is_write) {
++        iov = pdu->elem.out_sg;
++        niov = pdu->elem.out_num;
++    } else {
++        iov = pdu->elem.in_sg;
++        niov = pdu->elem.in_num;
++    }
++
++    qemu_iovec_init_external(&elem, iov, niov);
++    qemu_iovec_init(qiov, niov);
++    qemu_iovec_copy(qiov, &elem, skip, size);
++}
++
+ static void v9fs_read(void *opaque)
+ {
+     int32_t fid;
+-    int64_t off;
++    uint64_t off;
+     ssize_t err = 0;
+     int32_t count = 0;
+     size_t offset = 7;
+-    int32_t max_count;
++    uint32_t max_count;
+     V9fsFidState *fidp;
+     V9fsPDU *pdu = opaque;
+     V9fsState *s = pdu->s;
+@@ -1850,21 +1845,21 @@
+         err += pdu_marshal(pdu, offset, "d", count);
+         err += count;
+     } else if (fidp->fid_type == P9_FID_FILE) {
+-        int32_t cnt;
++        QEMUIOVector qiov_full;
++        QEMUIOVector qiov;
+         int32_t len;
+-        struct iovec *sg;
+-        struct iovec iov[128]; /* FIXME: bad, bad, bad */
+ 
+-        sg = iov;
+-        pdu_marshal(pdu, offset + 4, "v", sg, &cnt);
+-        sg = cap_sg(sg, max_count, &cnt);
++        v9fs_init_qiov_from_pdu(&qiov_full, pdu, offset + 4, max_count, false);
++        qemu_iovec_init(&qiov, qiov_full.niov);
+         do {
++            qemu_iovec_reset(&qiov);
++            qemu_iovec_copy(&qiov, &qiov_full, count, qiov_full.size - count);
+             if (0) {
+-                print_sg(sg, cnt);
++                print_sg(qiov.iov, qiov.niov);
+             }
+             /* Loop in case of EINTR */
+             do {
+-                len = v9fs_co_preadv(pdu, fidp, sg, cnt, off);
++                len = v9fs_co_preadv(pdu, fidp, qiov.iov, qiov.niov, off);
+                 if (len >= 0) {
+                     off   += len;
+                     count += len;
+@@ -1875,11 +1870,12 @@
+                 err = len;
+                 goto out;
+             }
+-            sg = adjust_sg(sg, len, &cnt);
+         } while (count < max_count && len > 0);
+         err = offset;
+         err += pdu_marshal(pdu, offset, "d", count);
+         err += count;
++        qemu_iovec_destroy(&qiov);
++        qemu_iovec_destroy(&qiov_full);
+     } else if (fidp->fid_type == P9_FID_XATTR) {
+         err = v9fs_xattr_read(s, pdu, fidp, off, max_count);
+     } else {
+@@ -1966,8 +1962,9 @@
+     V9fsFidState *fidp;
+     ssize_t retval = 0;
+     size_t offset = 7;
+-    int64_t initial_offset;
+-    int32_t count, max_count;
++    uint64_t initial_offset;
++    int32_t count;
++    uint32_t max_count;
+     V9fsPDU *pdu = opaque;
+     V9fsState *s = pdu->s;
+ 
+@@ -2005,7 +2002,7 @@
+ }
+ 
+ static int v9fs_xattr_write(V9fsState *s, V9fsPDU *pdu, V9fsFidState *fidp,
+-                            int64_t off, int32_t count,
++                            uint64_t off, uint32_t count,
+                             struct iovec *sg, int cnt)
+ {
+     int i, to_copy;
+@@ -2050,22 +2047,22 @@
+ 
+ static void v9fs_write(void *opaque)
+ {
+-    int cnt;
+     ssize_t err;
+     int32_t fid;
+-    int64_t off;
+-    int32_t count;
++    uint64_t off;
++    uint32_t count;
+     int32_t len = 0;
+     int32_t total = 0;
+     size_t offset = 7;
+     V9fsFidState *fidp;
+-    struct iovec iov[128]; /* FIXME: bad, bad, bad */
+-    struct iovec *sg = iov;
+     V9fsPDU *pdu = opaque;
+     V9fsState *s = pdu->s;
++    QEMUIOVector qiov_full;
++    QEMUIOVector qiov;
+ 
+-    pdu_unmarshal(pdu, offset, "dqdv", &fid, &off, &count, sg, &cnt);
+-    trace_v9fs_write(pdu->tag, pdu->id, fid, off, count, cnt);
++    offset += pdu_unmarshal(pdu, offset, "dqd", &fid, &off, &count);
++    v9fs_init_qiov_from_pdu(&qiov_full, pdu, offset, count, true);
++    trace_v9fs_write(pdu->tag, pdu->id, fid, off, count, qiov_full.niov);
+ 
+     fidp = get_fid(pdu, fid);
+     if (fidp == NULL) {
+@@ -2081,20 +2078,23 @@
+         /*
+          * setxattr operation
+          */
+-        err = v9fs_xattr_write(s, pdu, fidp, off, count, sg, cnt);
++        err = v9fs_xattr_write(s, pdu, fidp, off, count,
++                               qiov_full.iov, qiov_full.niov);
+         goto out;
+     } else {
+         err = -EINVAL;
+         goto out;
+     }
+-    sg = cap_sg(sg, count, &cnt);
++    qemu_iovec_init(&qiov, qiov_full.niov);
+     do {
++        qemu_iovec_reset(&qiov);
++        qemu_iovec_copy(&qiov, &qiov_full, total, qiov_full.size - total);
+         if (0) {
+-            print_sg(sg, cnt);
++            print_sg(qiov.iov, qiov.niov);
+         }
+         /* Loop in case of EINTR */
+         do {
+-            len = v9fs_co_pwritev(pdu, fidp, sg, cnt, off);
++            len = v9fs_co_pwritev(pdu, fidp, qiov.iov, qiov.niov, off);
+             if (len >= 0) {
+                 off   += len;
+                 total += len;
+@@ -2103,16 +2103,20 @@
+         if (len < 0) {
+             /* IO error return the error */
+             err = len;
+-            goto out;
++            goto out_qiov;
+         }
+-        sg = adjust_sg(sg, len, &cnt);
+     } while (total < count && len > 0);
++
++    offset = 7;
+     offset += pdu_marshal(pdu, offset, "d", total);
+     err = offset;
+     trace_v9fs_write_return(pdu->tag, pdu->id, total, err);
++out_qiov:
++    qemu_iovec_destroy(&qiov);
+ out:
+     put_fid(pdu, fidp);
+ out_nofid:
++    qemu_iovec_destroy(&qiov_full);
+     complete_pdu(s, pdu, err);
+ }
+ 
+diff -urN qemu-1.0/hw/9pfs/virtio-9p-device.c qemu-1.0.1/hw/9pfs/virtio-9p-device.c
+--- qemu-1.0/hw/9pfs/virtio-9p-device.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p-device.c	2012-02-17 20:45:39.000000000 +0100
+@@ -33,13 +33,15 @@
+ 
+ static void virtio_9p_get_config(VirtIODevice *vdev, uint8_t *config)
+ {
++    int len;
+     struct virtio_9p_config *cfg;
+     V9fsState *s = to_virtio_9p(vdev);
+ 
+-    cfg = g_malloc0(sizeof(struct virtio_9p_config) +
+-                        s->tag_len);
+-    stw_raw(&cfg->tag_len, s->tag_len);
+-    memcpy(cfg->tag, s->tag, s->tag_len);
++    len = strlen(s->tag);
++    cfg = g_malloc0(sizeof(struct virtio_9p_config) + len);
++    stw_raw(&cfg->tag_len, len);
++    /* We don't copy the terminating null to config space */
++    memcpy(cfg->tag, s->tag, len);
+     memcpy(config, cfg, s->config_size);
+     g_free(cfg);
+ }
+@@ -96,20 +98,18 @@
+     }
+ 
+     len = strlen(conf->tag);
+-    if (len > MAX_TAG_LEN) {
++    if (len > MAX_TAG_LEN - 1) {
+         fprintf(stderr, "mount tag '%s' (%d bytes) is longer than "
+-                "maximum (%d bytes)", conf->tag, len, MAX_TAG_LEN);
++                "maximum (%d bytes)", conf->tag, len, MAX_TAG_LEN - 1);
+         exit(1);
+     }
+-    /* s->tag is non-NULL terminated string */
+-    s->tag = g_malloc(len);
+-    memcpy(s->tag, conf->tag, len);
+-    s->tag_len = len;
++
++    s->tag = strdup(conf->tag);
+     s->ctx.uid = -1;
+ 
+     s->ops = fse->ops;
+     s->vdev.get_features = virtio_9p_get_features;
+-    s->config_size = sizeof(struct virtio_9p_config) + s->tag_len;
++    s->config_size = sizeof(struct virtio_9p_config) + len;
+     s->vdev.get_config = virtio_9p_get_config;
+     s->fid_list = NULL;
+     qemu_co_rwlock_init(&s->rename_lock);
+@@ -176,7 +176,8 @@
+         DEFINE_PROP_STRING("mount_tag", VirtIOPCIProxy, fsconf.tag),
+         DEFINE_PROP_STRING("fsdev", VirtIOPCIProxy, fsconf.fsdev_id),
+         DEFINE_PROP_END_OF_LIST(),
+-    }
++    },
++    .qdev.reset = virtio_pci_reset,
+ };
+ 
+ static void virtio_9p_register_devices(void)
+diff -urN qemu-1.0/hw/9pfs/virtio-9p.h qemu-1.0.1/hw/9pfs/virtio-9p.h
+--- qemu-1.0/hw/9pfs/virtio-9p.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p.h	2012-02-17 20:45:39.000000000 +0100
+@@ -156,7 +156,7 @@
+ 
+ typedef struct V9fsString
+ {
+-    int16_t size;
++    uint16_t size;
+     char *data;
+ } V9fsString;
+ 
+@@ -246,8 +246,7 @@
+     V9fsFidState *fid_list;
+     FileOperations *ops;
+     FsContext ctx;
+-    uint16_t tag_len;
+-    uint8_t *tag;
++    char *tag;
+     size_t config_size;
+     enum p9_proto_version proto_version;
+     int32_t msize;
+@@ -256,6 +255,8 @@
+      * on rename.
+      */
+     CoRwlock rename_lock;
++    int32_t root_fid;
++    Error *migration_blocker;
+ } V9fsState;
+ 
+ typedef struct V9fsStatState {
+diff -urN qemu-1.0/hw/9pfs/virtio-9p-handle.c qemu-1.0.1/hw/9pfs/virtio-9p-handle.c
+--- qemu-1.0/hw/9pfs/virtio-9p-handle.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p-handle.c	2012-02-17 20:45:39.000000000 +0100
+@@ -45,7 +45,6 @@
+     int handle_bytes;
+ };
+ 
+-#ifdef CONFIG_OPEN_BY_HANDLE
+ static inline int name_to_handle(int dirfd, const char *name,
+                                  struct file_handle *fh, int *mnt_id, int flags)
+ {
+@@ -56,38 +55,6 @@
+ {
+     return open_by_handle_at(mountfd, (struct file_handle *)fh, flags);
+ }
+-#else
+-
+-struct rpl_file_handle {
+-    unsigned int handle_bytes;
+-    int handle_type;
+-    unsigned char handle[0];
+-};
+-#define file_handle rpl_file_handle
+-
+-#ifndef AT_REMOVEDIR
+-#define AT_REMOVEDIR    0x200
+-#endif
+-#ifndef AT_EMPTY_PATH
+-#define AT_EMPTY_PATH   0x1000  /* Allow empty relative pathname */
+-#endif
+-#ifndef O_PATH
+-#define O_PATH    010000000
+-#endif
+-
+-static inline int name_to_handle(int dirfd, const char *name,
+-                                 struct file_handle *fh, int *mnt_id, int flags)
+-{
+-    errno = ENOSYS;
+-    return -1;
+-}
+-
+-static inline int open_by_handle(int mountfd, const char *fh, int flags)
+-{
+-    errno = ENOSYS;
+-    return -1;
+-}
+-#endif
+ 
+ static int handle_update_file_cred(int dirfd, const char *name, FsCred *credp)
+ {
+@@ -288,10 +255,17 @@
+     return ret;
+ }
+ 
+-static int handle_fstat(FsContext *fs_ctx, V9fsFidOpenState *fs,
+-                        struct stat *stbuf)
++static int handle_fstat(FsContext *fs_ctx, int fid_type,
++                        V9fsFidOpenState *fs, struct stat *stbuf)
+ {
+-    return fstat(fs->fd, stbuf);
++    int fd;
++
++    if (fid_type == P9_FID_DIR) {
++        fd = dirfd(fs->dir);
++    } else {
++        fd = fs->fd;
++    }
++    return fstat(fd, stbuf);
+ }
+ 
+ static int handle_open2(FsContext *fs_ctx, V9fsPath *dir_path, const char *name,
+@@ -428,12 +402,21 @@
+     return -1;
+ }
+ 
+-static int handle_fsync(FsContext *ctx, V9fsFidOpenState *fs, int datasync)
++static int handle_fsync(FsContext *ctx, int fid_type,
++                        V9fsFidOpenState *fs, int datasync)
+ {
++    int fd;
++
++    if (fid_type == P9_FID_DIR) {
++        fd = dirfd(fs->dir);
++    } else {
++        fd = fs->fd;
++    }
++
+     if (datasync) {
+-        return qemu_fdatasync(fs->fd);
++        return qemu_fdatasync(fd);
+     } else {
+-        return fsync(fs->fd);
++        return fsync(fd);
+     }
+ }
+ 
+diff -urN qemu-1.0/hw/9pfs/virtio-9p-local.c qemu-1.0.1/hw/9pfs/virtio-9p-local.c
+--- qemu-1.0/hw/9pfs/virtio-9p-local.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p-local.c	2012-02-17 20:45:39.000000000 +0100
+@@ -366,11 +366,18 @@
+     return err;
+ }
+ 
+-static int local_fstat(FsContext *fs_ctx,
++static int local_fstat(FsContext *fs_ctx, int fid_type,
+                        V9fsFidOpenState *fs, struct stat *stbuf)
+ {
+-    int err;
+-    err = fstat(fs->fd, stbuf);
++    int err, fd;
++
++    if (fid_type == P9_FID_DIR) {
++        fd = dirfd(fs->dir);
++    } else {
++        fd = fs->fd;
++    }
++
++    err = fstat(fd, stbuf);
+     if (err) {
+         return err;
+     }
+@@ -381,19 +388,19 @@
+         mode_t tmp_mode;
+         dev_t tmp_dev;
+ 
+-        if (fgetxattr(fs->fd, "user.virtfs.uid",
++        if (fgetxattr(fd, "user.virtfs.uid",
+                       &tmp_uid, sizeof(uid_t)) > 0) {
+             stbuf->st_uid = tmp_uid;
+         }
+-        if (fgetxattr(fs->fd, "user.virtfs.gid",
++        if (fgetxattr(fd, "user.virtfs.gid",
+                       &tmp_gid, sizeof(gid_t)) > 0) {
+             stbuf->st_gid = tmp_gid;
+         }
+-        if (fgetxattr(fs->fd, "user.virtfs.mode",
++        if (fgetxattr(fd, "user.virtfs.mode",
+                       &tmp_mode, sizeof(mode_t)) > 0) {
+             stbuf->st_mode = tmp_mode;
+         }
+-        if (fgetxattr(fs->fd, "user.virtfs.rdev",
++        if (fgetxattr(fd, "user.virtfs.rdev",
+                       &tmp_dev, sizeof(dev_t)) > 0) {
+                 stbuf->st_rdev = tmp_dev;
+         }
+@@ -592,12 +599,21 @@
+     return remove(rpath(ctx, path, buffer));
+ }
+ 
+-static int local_fsync(FsContext *ctx, V9fsFidOpenState *fs, int datasync)
++static int local_fsync(FsContext *ctx, int fid_type,
++                       V9fsFidOpenState *fs, int datasync)
+ {
++    int fd;
++
++    if (fid_type == P9_FID_DIR) {
++        fd = dirfd(fs->dir);
++    } else {
++        fd = fs->fd;
++    }
++
+     if (datasync) {
+-        return qemu_fdatasync(fs->fd);
++        return qemu_fdatasync(fd);
+     } else {
+-        return fsync(fs->fd);
++        return fsync(fd);
+     }
+ }
+ 
+diff -urN qemu-1.0/hw/9pfs/virtio-9p-synth.c qemu-1.0.1/hw/9pfs/virtio-9p-synth.c
+--- qemu-1.0/hw/9pfs/virtio-9p-synth.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/9pfs/virtio-9p-synth.c	2012-02-17 20:45:39.000000000 +0100
+@@ -166,7 +166,7 @@
+     return 0;
+ }
+ 
+-static int v9fs_synth_fstat(FsContext *fs_ctx,
++static int v9fs_synth_fstat(FsContext *fs_ctx, int fid_type,
+                             V9fsFidOpenState *fs, struct stat *stbuf)
+ {
+     V9fsSynthOpenState *synth_open = fs->private;
+@@ -414,7 +414,8 @@
+     return -1;
+ }
+ 
+-static int v9fs_synth_fsync(FsContext *ctx, V9fsFidOpenState *fs, int datasync)
++static int v9fs_synth_fsync(FsContext *ctx, int fid_type,
++                            V9fsFidOpenState *fs, int datasync)
+ {
+     errno = ENOSYS;
+     return 0;
+diff -urN qemu-1.0/hw/e1000.c qemu-1.0.1/hw/e1000.c
+--- qemu-1.0/hw/e1000.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/e1000.c	2012-02-17 20:45:39.000000000 +0100
+@@ -466,6 +466,8 @@
+             bytes = split_size;
+             if (tp->size + bytes > msh)
+                 bytes = msh - tp->size;
++
++            bytes = MIN(sizeof(tp->data) - tp->size, bytes);
+             pci_dma_read(&s->dev, addr, tp->data + tp->size, bytes);
+             if ((sz = tp->size + bytes) >= hdr && tp->size < hdr)
+                 memmove(tp->header, tp->data, hdr);
+@@ -481,6 +483,7 @@
+         // context descriptor TSE is not set, while data descriptor TSE is set
+         DBGOUT(TXERR, "TCP segmentaion Error\n");
+     } else {
++        split_size = MIN(sizeof(tp->data) - tp->size, split_size);
+         pci_dma_read(&s->dev, addr, tp->data + tp->size, split_size);
+         tp->size += split_size;
+     }
+diff -urN qemu-1.0/hw/mips_malta.c qemu-1.0.1/hw/mips_malta.c
+--- qemu-1.0/hw/mips_malta.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/mips_malta.c	2012-02-17 20:45:39.000000000 +0100
+@@ -47,6 +47,7 @@
+ #include "mc146818rtc.h"
+ #include "blockdev.h"
+ #include "exec-memory.h"
++#include "sysbus.h"             /* SysBusDevice */
+ 
+ //#define DEBUG_BOARD_INIT
+ 
+@@ -72,6 +73,11 @@
+     SerialState *uart;
+ } MaltaFPGAState;
+ 
++typedef struct {
++    SysBusDevice busdev;
++    qemu_irq *i8259;
++} MaltaState;
++
+ static ISADevice *pit;
+ 
+ static struct _loaderparams {
+@@ -775,7 +781,7 @@
+     int64_t kernel_entry;
+     PCIBus *pci_bus;
+     CPUState *env;
+-    qemu_irq *i8259 = NULL, *isa_irq;
++    qemu_irq *isa_irq;
+     qemu_irq *cpu_exit_irq;
+     int piix4_devfn;
+     i2c_bus *smbus;
+@@ -787,6 +793,11 @@
+     int fl_sectors = 0;
+     int be;
+ 
++    DeviceState *dev = qdev_create(NULL, "mips-malta");
++    MaltaState *s = DO_UPCAST(MaltaState, busdev.qdev, dev);
++
++    qdev_init_nofail(dev);
++
+     /* Make sure the first 3 serial ports are associated with a device. */
+     for(i = 0; i < 3; i++) {
+         if (!serial_hds[i]) {
+@@ -932,7 +943,7 @@
+      * qemu_irq_proxy() adds an extra bit of indirection, allowing us
+      * to resolve the isa_irq -> i8259 dependency after i8259 is initialized.
+      */
+-    isa_irq = qemu_irq_proxy(&i8259, 16);
++    isa_irq = qemu_irq_proxy(&s->i8259, 16);
+ 
+     /* Northbridge */
+     pci_bus = gt64120_register(isa_irq);
+@@ -944,9 +955,9 @@
+ 
+     /* Interrupt controller */
+     /* The 8259 is attached to the MIPS CPU INT0 pin, ie interrupt 2 */
+-    i8259 = i8259_init(env->irq[2]);
++    s->i8259 = i8259_init(env->irq[2]);
+ 
+-    isa_bus_irqs(i8259);
++    isa_bus_irqs(s->i8259);
+     pci_piix4_ide_init(pci_bus, hd, piix4_devfn + 1);
+     usb_uhci_piix4_init(pci_bus, piix4_devfn + 2);
+     smbus = piix4_pm_init(pci_bus, piix4_devfn + 3, 0x1100, isa_get_irq(9),
+@@ -990,6 +1001,20 @@
+     }
+ }
+ 
++static int mips_malta_sysbus_device_init(SysBusDevice *sysbusdev)
++{
++    return 0;
++}
++
++static SysBusDeviceInfo mips_malta_device = {
++    .init = mips_malta_sysbus_device_init,
++    .qdev.name  = "mips-malta",
++    .qdev.size  = sizeof(MaltaState),
++    .qdev.props = (Property[]) {
++        DEFINE_PROP_END_OF_LIST(),
++    }
++};
++
+ static QEMUMachine mips_malta_machine = {
+     .name = "malta",
+     .desc = "MIPS Malta Core LV",
+@@ -998,9 +1023,15 @@
+     .is_default = 1,
+ };
+ 
++static void mips_malta_device_init(void)
++{
++    sysbus_register_withprop(&mips_malta_device);
++}
++
+ static void mips_malta_machine_init(void)
+ {
+     qemu_register_machine(&mips_malta_machine);
+ }
+ 
++device_init(mips_malta_device_init);
+ machine_init(mips_malta_machine_init);
+diff -urN qemu-1.0/hw/pc_piix.c qemu-1.0.1/hw/pc_piix.c
+--- qemu-1.0/hw/pc_piix.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/pc_piix.c	2012-02-17 20:45:39.000000000 +0100
+@@ -306,6 +306,14 @@
+     .is_default = 1,
+ };
+ 
++static QEMUMachine pc_machine_v0_15 = {
++    .name = "pc-0.15",
++    .desc = "Standard PC",
++    .init = pc_init_pci,
++    .max_cpus = 255,
++    .is_default = 1,
++};
++
+ static QEMUMachine pc_machine_v0_14 = {
+     .name = "pc-0.14",
+     .desc = "Standard PC",
+@@ -320,6 +328,22 @@
+             .driver   = "qxl-vga",
+             .property = "revision",
+             .value    = stringify(2),
++        },{
++            .driver   = "virtio-blk-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
++            .driver   = "virtio-serial-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
++            .driver   = "virtio-net-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
++            .driver   = "virtio-balloon-pci",
++            .property = "event_idx",
++            .value    = "off",
+         },
+         { /* end of list */ }
+     },
+@@ -360,6 +384,10 @@
+             .property = "event_idx",
+             .value    = "off",
+         },{
++            .driver   = "virtio-balloon-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
+             .driver   = "AC97",
+             .property = "use_broken_id",
+             .value    = stringify(1),
+@@ -407,6 +435,10 @@
+             .property = "event_idx",
+             .value    = "off",
+         },{
++            .driver   = "virtio-balloon-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
+             .driver   = "AC97",
+             .property = "use_broken_id",
+             .value    = stringify(1),
+@@ -462,6 +494,10 @@
+             .property = "event_idx",
+             .value    = "off",
+         },{
++            .driver   = "virtio-balloon-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
+             .driver   = "AC97",
+             .property = "use_broken_id",
+             .value    = stringify(1),
+@@ -529,6 +565,10 @@
+             .property = "event_idx",
+             .value    = "off",
+         },{
++            .driver   = "virtio-balloon-pci",
++            .property = "event_idx",
++            .value    = "off",
++        },{
+             .driver   = "AC97",
+             .property = "use_broken_id",
+             .value    = stringify(1),
+@@ -557,6 +597,7 @@
+ static void pc_machine_init(void)
+ {
+     qemu_register_machine(&pc_machine_v1_0);
++    qemu_register_machine(&pc_machine_v0_15);
+     qemu_register_machine(&pc_machine_v0_14);
+     qemu_register_machine(&pc_machine_v0_13);
+     qemu_register_machine(&pc_machine_v0_12);
+diff -urN qemu-1.0/hw/ppce500_spin.c qemu-1.0.1/hw/ppce500_spin.c
+--- qemu-1.0/hw/ppce500_spin.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/ppce500_spin.c	2012-02-17 20:45:39.000000000 +0100
+@@ -112,6 +112,7 @@
+ 
+     env->halted = 0;
+     env->exception_index = -1;
++    env->stopped = 0;
+     qemu_cpu_kick(env);
+ }
+ 
+diff -urN qemu-1.0/hw/spapr.c qemu-1.0.1/hw/spapr.c
+--- qemu-1.0/hw/spapr.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/spapr.c	2012-02-17 20:45:39.000000000 +0100
+@@ -351,6 +351,8 @@
+         fprintf(stderr, "Couldn't set up RTAS device tree properties\n");
+     }
+ 
++    spapr_populate_chosen_stdout(fdt, spapr->vio_bus);
++
+     _FDT((fdt_pack(fdt)));
+ 
+     cpu_physical_memory_write(fdt_addr, fdt, fdt_totalsize(fdt));
+diff -urN qemu-1.0/hw/spapr_pci.c qemu-1.0.1/hw/spapr_pci.c
+--- qemu-1.0/hw/spapr_pci.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/spapr_pci.c	2012-02-17 20:45:39.000000000 +0100
+@@ -454,7 +454,7 @@
+         reg[0].size = 0;
+ 
+         n = 0;
+-        for (i = 0; i < PCI_NUM_REGIONS; ++i) {
++        for (i = 0; i < ARRAY_SIZE(bars); ++i) {
+             if (0 == dev->io_regions[i].size) {
+                 continue;
+             }
+diff -urN qemu-1.0/hw/spapr_vio.c qemu-1.0.1/hw/spapr_vio.c
+--- qemu-1.0/hw/spapr_vio.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/spapr_vio.c	2012-02-17 20:45:39.000000000 +0100
+@@ -749,21 +749,95 @@
+ device_init(spapr_vio_register_devices)
+ 
+ #ifdef CONFIG_FDT
++static int compare_reg(const void *p1, const void *p2)
++{
++    VIOsPAPRDevice const *dev1, *dev2;
++
++    dev1 = (VIOsPAPRDevice *)*(DeviceState **)p1;
++    dev2 = (VIOsPAPRDevice *)*(DeviceState **)p2;
++
++    if (dev1->reg < dev2->reg) {
++        return -1;
++    }
++    if (dev1->reg == dev2->reg) {
++        return 0;
++    }
++
++    /* dev1->reg > dev2->reg */
++    return 1;
++}
++
+ int spapr_populate_vdevice(VIOsPAPRBus *bus, void *fdt)
+ {
+-    DeviceState *qdev;
+-    int ret = 0;
++    DeviceState *qdev, **qdevs;
++    int i, num, ret = 0;
++
++    /* Count qdevs on the bus list */
++    num = 0;
++    QTAILQ_FOREACH(qdev, &bus->bus.children, sibling) {
++        num++;
++    }
+ 
++    /* Copy out into an array of pointers */
++    qdevs = g_malloc(sizeof(qdev) * num);
++    num = 0;
+     QTAILQ_FOREACH(qdev, &bus->bus.children, sibling) {
+-        VIOsPAPRDevice *dev = (VIOsPAPRDevice *)qdev;
++        qdevs[num++] = qdev;
++    }
++
++    /* Sort the array */
++    qsort(qdevs, num, sizeof(qdev), compare_reg);
++
++    /* Hack alert. Give the devices to libfdt in reverse order, we happen
++     * to know that will mean they are in forward order in the tree. */
++    for (i = num - 1; i >= 0; i--) {
++        VIOsPAPRDevice *dev = (VIOsPAPRDevice *)(qdevs[i]);
+ 
+         ret = vio_make_devnode(dev, fdt);
+ 
+         if (ret < 0) {
+-            return ret;
++            goto out;
+         }
+     }
+ 
+-    return 0;
++    ret = 0;
++out:
++    free(qdevs);
++
++    return ret;
++}
++
++int spapr_populate_chosen_stdout(void *fdt, VIOsPAPRBus *bus)
++{
++    VIOsPAPRDevice *dev;
++    char *name, *path;
++    int ret, offset;
++
++    dev = spapr_vty_get_default(bus);
++    if (!dev)
++        return 0;
++
++    offset = fdt_path_offset(fdt, "/chosen");
++    if (offset < 0) {
++        return offset;
++    }
++
++    name = vio_format_dev_name(dev);
++    if (!name) {
++        return -ENOMEM;
++    }
++
++    if (asprintf(&path, "/vdevice/%s", name) < 0) {
++        path = NULL;
++        ret = -ENOMEM;
++        goto out;
++    }
++
++    ret = fdt_setprop_string(fdt, offset, "linux,stdout-path", path);
++out:
++    free(name);
++    free(path);
++
++    return ret;
+ }
+ #endif /* CONFIG_FDT */
+diff -urN qemu-1.0/hw/spapr_vio.h qemu-1.0.1/hw/spapr_vio.h
+--- qemu-1.0/hw/spapr_vio.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/spapr_vio.h	2012-02-17 20:45:39.000000000 +0100
+@@ -83,6 +83,7 @@
+ extern VIOsPAPRDevice *spapr_vio_find_by_reg(VIOsPAPRBus *bus, uint32_t reg);
+ extern void spapr_vio_bus_register_withprop(VIOsPAPRDeviceInfo *info);
+ extern int spapr_populate_vdevice(VIOsPAPRBus *bus, void *fdt);
++extern int spapr_populate_chosen_stdout(void *fdt, VIOsPAPRBus *bus);
+ 
+ extern int spapr_vio_signal(VIOsPAPRDevice *dev, target_ulong mode);
+ 
+@@ -108,6 +109,8 @@
+ void spapr_vlan_create(VIOsPAPRBus *bus, uint32_t reg, NICInfo *nd);
+ void spapr_vscsi_create(VIOsPAPRBus *bus, uint32_t reg);
+ 
++VIOsPAPRDevice *spapr_vty_get_default(VIOsPAPRBus *bus);
++
+ int spapr_tce_set_bypass(uint32_t unit, uint32_t enable);
+ void spapr_vio_quiesce(void);
+ 
+diff -urN qemu-1.0/hw/spapr_vty.c qemu-1.0.1/hw/spapr_vty.c
+--- qemu-1.0/hw/spapr_vty.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/spapr_vty.c	2012-02-17 20:45:39.000000000 +0100
+@@ -156,24 +156,53 @@
+     },
+ };
+ 
++VIOsPAPRDevice *spapr_vty_get_default(VIOsPAPRBus *bus)
++{
++    VIOsPAPRDevice *sdev, *selected;
++    DeviceState *iter;
++
++    /*
++     * To avoid the console bouncing around we want one VTY to be
++     * the "default". We haven't really got anything to go on, so
++     * arbitrarily choose the one with the lowest reg value.
++     */
++
++    selected = NULL;
++    QTAILQ_FOREACH(iter, &bus->bus.children, sibling) {
++        /* Only look at VTY devices */
++        if (iter->info != &spapr_vty.qdev) {
++            continue;
++        }
++
++        sdev = DO_UPCAST(VIOsPAPRDevice, qdev, iter);
++
++        /* First VTY we've found, so it is selected for now */
++        if (!selected) {
++            selected = sdev;
++            continue;
++        }
++
++        /* Choose VTY with lowest reg value */
++        if (sdev->reg < selected->reg) {
++            selected = sdev;
++        }
++    }
++
++    return selected;
++}
++
+ static VIOsPAPRDevice *vty_lookup(sPAPREnvironment *spapr, target_ulong reg)
+ {
+     VIOsPAPRDevice *sdev;
+ 
+     sdev = spapr_vio_find_by_reg(spapr->vio_bus, reg);
+     if (!sdev && reg == 0) {
+-        DeviceState *qdev;
+-
+         /* Hack for kernel early debug, which always specifies reg==0.
+-         * We search all VIO devices, and grab the first available vty
+-         * device.  This attempts to mimic existing PowerVM behaviour
++         * We search all VIO devices, and grab the vty with the lowest
++         * reg.  This attempts to mimic existing PowerVM behaviour
+          * (early debug does work there, despite having no vty with
+          * reg==0. */
+-        QTAILQ_FOREACH(qdev, &spapr->vio_bus->bus.children, sibling) {
+-            if (qdev->info == &spapr_vty.qdev) {
+-                return DO_UPCAST(VIOsPAPRDevice, qdev, qdev);
+-            }
+-        }
++        return spapr_vty_get_default(spapr->vio_bus);
+     }
+ 
+     return sdev;
+diff -urN qemu-1.0/hw/usb-msd.c qemu-1.0.1/hw/usb-msd.c
+--- qemu-1.0/hw/usb-msd.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/usb-msd.c	2012-02-17 20:45:39.000000000 +0100
+@@ -278,6 +278,18 @@
+     MSDState *s = (MSDState *)dev;
+ 
+     DPRINTF("Reset\n");
++    if (s->req) {
++        scsi_req_cancel(s->req);
++    }
++    assert(s->req == NULL);
++
++    if (s->packet) {
++        USBPacket *p = s->packet;
++        s->packet = NULL;
++        p->result = USB_RET_STALL;
++        usb_packet_complete(dev, p);
++    }
++
+     s->mode = USB_MSDM_CBW;
+ }
+ 
+diff -urN qemu-1.0/hw/usb-ohci.c qemu-1.0.1/hw/usb-ohci.c
+--- qemu-1.0/hw/usb-ohci.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/usb-ohci.c	2012-02-17 20:45:39.000000000 +0100
+@@ -1025,10 +1025,10 @@
+         if (ret == len) {
+             td.cbp = 0;
+         } else {
+-            td.cbp += ret;
+             if ((td.cbp & 0xfff) + ret > 0xfff) {
+-                td.cbp &= 0xfff;
+-                td.cbp |= td.be & ~0xfff;
++                td.cbp = (td.be & ~0xfff) + ((td.cbp + ret) & 0xfff);
++            } else {
++                td.cbp += ret;
+             }
+         }
+         td.flags |= OHCI_TD_T1;
+diff -urN qemu-1.0/hw/virtio-pci.c qemu-1.0.1/hw/virtio-pci.c
+--- qemu-1.0/hw/virtio-pci.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/virtio-pci.c	2012-02-17 20:45:39.000000000 +0100
+@@ -266,7 +266,7 @@
+     proxy->ioeventfd_started = false;
+ }
+ 
+-static void virtio_pci_reset(DeviceState *d)
++void virtio_pci_reset(DeviceState *d)
+ {
+     VirtIOPCIProxy *proxy = container_of(d, VirtIOPCIProxy, pci_dev.qdev);
+     virtio_pci_stop_ioeventfd(proxy);
+diff -urN qemu-1.0/hw/virtio-pci.h qemu-1.0.1/hw/virtio-pci.h
+--- qemu-1.0/hw/virtio-pci.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/hw/virtio-pci.h	2012-02-17 20:45:39.000000000 +0100
+@@ -45,6 +45,7 @@
+ } VirtIOPCIProxy;
+ 
+ void virtio_init_pci(VirtIOPCIProxy *proxy, VirtIODevice *vdev);
++void virtio_pci_reset(DeviceState *d);
+ 
+ /* Virtio ABI version, if we increment this, we break the guest driver. */
+ #define VIRTIO_PCI_ABI_VERSION          0
+diff -urN qemu-1.0/Makefile.objs qemu-1.0.1/Makefile.objs
+--- qemu-1.0/Makefile.objs	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/Makefile.objs	2012-02-17 20:45:39.000000000 +0100
+@@ -310,8 +310,8 @@
+ 9pfs-nested-$(CONFIG_VIRTFS) += virtio-9p-local.o virtio-9p-xattr.o
+ 9pfs-nested-$(CONFIG_VIRTFS) += virtio-9p-xattr-user.o virtio-9p-posix-acl.o
+ 9pfs-nested-$(CONFIG_VIRTFS) += virtio-9p-coth.o cofs.o codir.o cofile.o
+-9pfs-nested-$(CONFIG_VIRTFS) += coxattr.o virtio-9p-handle.o
+-9pfs-nested-$(CONFIG_VIRTFS) += virtio-9p-synth.o
++9pfs-nested-$(CONFIG_VIRTFS) += coxattr.o virtio-9p-synth.o
++9pfs-nested-$(CONFIG_OPEN_BY_HANDLE) +=  virtio-9p-handle.o
+ 
+ hw-obj-$(CONFIG_REALLY_VIRTFS) += $(addprefix 9pfs/, $(9pfs-nested-y))
+ $(addprefix 9pfs/, $(9pfs-nested-y)): QEMU_CFLAGS+=$(GLIB_CFLAGS)
+diff -urN qemu-1.0/ppc64.ld qemu-1.0.1/ppc64.ld
+--- qemu-1.0/ppc64.ld	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/ppc64.ld	2012-02-17 20:45:39.000000000 +0100
+@@ -54,8 +54,20 @@
+       *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*)
+       *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*)
+     }
+-  .rel.plt        : { *(.rel.plt) }
+-  .rela.plt       : { *(.rela.plt) }
++  .rel.plt      :
++  {
++    *(.rel.plt)
++    PROVIDE (__rel_iplt_start = .);
++    *(.rel.iplt)
++    PROVIDE (__rel_iplt_end = .);
++  }
++  .rela.plt       :
++  {
++    *(.rela.plt)
++    PROVIDE (__rela_iplt_start = .);
++    *(.rela.iplt)
++    PROVIDE (__rela_iplt_end = .);
++  }
+   .rela.tocbss	  : { *(.rela.tocbss) }
+   .init           :
+   {
+diff -urN qemu-1.0/ppc.ld qemu-1.0.1/ppc.ld
+--- qemu-1.0/ppc.ld	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/ppc.ld	2012-02-17 20:45:39.000000000 +0100
+@@ -49,8 +49,20 @@
+   .rela.sbss2     : { *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*) }
+   .rel.bss        : { *(.rel.bss .rel.bss.* .rel.gnu.linkonce.b.*) }
+   .rela.bss       : { *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*) }
+-  .rel.plt        : { *(.rel.plt) }
+-  .rela.plt       : { *(.rela.plt) }
++  .rel.plt      :
++  {
++    *(.rel.plt)
++    PROVIDE (__rel_iplt_start = .);
++    *(.rel.iplt)
++    PROVIDE (__rel_iplt_end = .);
++  }
++  .rela.plt       :
++  {
++    *(.rela.plt)
++    PROVIDE (__rela_iplt_start = .);
++    *(.rela.iplt)
++    PROVIDE (__rela_iplt_end = .);
++  }
+   .init           :
+   {
+     KEEP (*(.init))
+diff -urN qemu-1.0/qemu-img.c qemu-1.0.1/qemu-img.c
+--- qemu-1.0/qemu-img.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/qemu-img.c	2012-02-17 20:45:39.000000000 +0100
+@@ -1420,6 +1420,8 @@
+      */
+     if (!unsafe) {
+         uint64_t num_sectors;
++        uint64_t old_backing_num_sectors;
++        uint64_t new_backing_num_sectors;
+         uint64_t sector;
+         int n;
+         uint8_t * buf_old;
+@@ -1430,6 +1432,8 @@
+         buf_new = qemu_blockalign(bs, IO_BUF_SIZE);
+ 
+         bdrv_get_geometry(bs, &num_sectors);
++        bdrv_get_geometry(bs_old_backing, &old_backing_num_sectors);
++        bdrv_get_geometry(bs_new_backing, &new_backing_num_sectors);
+ 
+         local_progress = (float)100 /
+             (num_sectors / MIN(num_sectors, IO_BUF_SIZE / 512));
+@@ -1448,16 +1452,36 @@
+                 continue;
+             }
+ 
+-            /* Read old and new backing file */
+-            ret = bdrv_read(bs_old_backing, sector, buf_old, n);
+-            if (ret < 0) {
+-                error_report("error while reading from old backing file");
+-                goto out;
++            /*
++             * Read old and new backing file and take into consideration that
++             * backing files may be smaller than the COW image.
++             */
++            if (sector >= old_backing_num_sectors) {
++                memset(buf_old, 0, n * BDRV_SECTOR_SIZE);
++            } else {
++                if (sector + n > old_backing_num_sectors) {
++                    n = old_backing_num_sectors - sector;
++                }
++
++                ret = bdrv_read(bs_old_backing, sector, buf_old, n);
++                if (ret < 0) {
++                    error_report("error while reading from old backing file");
++                    goto out;
++                }
+             }
+-            ret = bdrv_read(bs_new_backing, sector, buf_new, n);
+-            if (ret < 0) {
+-                error_report("error while reading from new backing file");
+-                goto out;
++
++            if (sector >= new_backing_num_sectors) {
++                memset(buf_new, 0, n * BDRV_SECTOR_SIZE);
++            } else {
++                if (sector + n > new_backing_num_sectors) {
++                    n = new_backing_num_sectors - sector;
++                }
++
++                ret = bdrv_read(bs_new_backing, sector, buf_new, n);
++                if (ret < 0) {
++                    error_report("error while reading from new backing file");
++                    goto out;
++                }
+             }
+ 
+             /* If they differ, we need to write to the COW file */
+diff -urN qemu-1.0/qemu-img-cmds.hx qemu-1.0.1/qemu-img-cmds.hx
+--- qemu-1.0/qemu-img-cmds.hx	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/qemu-img-cmds.hx	2012-02-17 20:45:39.000000000 +0100
+@@ -24,13 +24,13 @@
+ DEF("commit", img_commit,
+     "commit [-f fmt] [-t cache] filename")
+ STEXI
+-@item commit [-f @var{fmt}] @var{filename}
++@item commit [-f @var{fmt}] [-t @var{cache}] @var{filename}
+ ETEXI
+ 
+ DEF("convert", img_convert,
+     "convert [-c] [-p] [-f fmt] [-t cache] [-O output_fmt] [-o options] [-s snapshot_name] [-S sparse_size] filename [filename2 [...]] output_filename")
+ STEXI
+-@item convert [-c] [-p] [-f @var{fmt}] [-O @var{output_fmt}] [-o @var{options}] [-s @var{snapshot_name}] [-S @var{sparse_size}] @var{filename} [@var{filename2} [...]] @var{output_filename}
++@item convert [-c] [-p] [-f @var{fmt}] [-t @var{cache}] [-O @var{output_fmt}] [-o @var{options}] [-s @var{snapshot_name}] [-S @var{sparse_size}] @var{filename} [@var{filename2} [...]] @var{output_filename}
+ ETEXI
+ 
+ DEF("info", img_info,
+@@ -48,7 +48,7 @@
+ DEF("rebase", img_rebase,
+     "rebase [-f fmt] [-t cache] [-p] [-u] -b backing_file [-F backing_fmt] filename")
+ STEXI
+-@item rebase [-f @var{fmt}] [-p] [-u] -b @var{backing_file} [-F @var{backing_fmt}] @var{filename}
++@item rebase [-f @var{fmt}] [-t @var{cache}] [-p] [-u] -b @var{backing_file} [-F @var{backing_fmt}] @var{filename}
+ ETEXI
+ 
+ DEF("resize", img_resize,
+diff -urN qemu-1.0/qemu-img.texi qemu-1.0.1/qemu-img.texi
+--- qemu-1.0/qemu-img.texi	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/qemu-img.texi	2012-02-17 20:45:39.000000000 +0100
+@@ -45,6 +45,10 @@
+ for qemu-img to create a sparse image during conversion. This value is rounded
+ down to the nearest 512 bytes. You may use the common size suffixes like
+ @code{k} for kilobytes.
++@item -t @var{cache}
++specifies the cache mode that should be used with the (destination) file. See
++the documentation of the emulator's @code{-drive cache=...} option for allowed
++values.
+ @end table
+ 
+ Parameters to snapshot subcommand:
+@@ -87,11 +91,11 @@
+ The size can also be specified using the @var{size} option with @code{-o},
+ it doesn't need to be specified separately in this case.
+ 
+-@item commit [-f @var{fmt}] @var{filename}
++@item commit [-f @var{fmt}] [-t @var{cache}] @var{filename}
+ 
+ Commit the changes recorded in @var{filename} in its base image.
+ 
+-@item convert [-c] [-p] [-f @var{fmt}] [-O @var{output_fmt}] [-o @var{options}] [-s @var{snapshot_name}] [-S @var{sparse_size}] @var{filename} [@var{filename2} [...]] @var{output_filename}
++@item convert [-c] [-p] [-f @var{fmt}] [-t @var{cache}] [-O @var{output_fmt}] [-o @var{options}] [-s @var{snapshot_name}] [-S @var{sparse_size}] @var{filename} [@var{filename2} [...]] @var{output_filename}
+ 
+ Convert the disk image @var{filename} or a snapshot @var{snapshot_name} to disk image @var{output_filename}
+ using format @var{output_fmt}. It can be optionally compressed (@code{-c}
+@@ -121,7 +125,7 @@
+ 
+ List, apply, create or delete snapshots in image @var{filename}.
+ 
+-@item rebase [-f @var{fmt}] [-p] [-u] -b @var{backing_file} [-F @var{backing_fmt}] @var{filename}
++@item rebase [-f @var{fmt}] [-t @var{cache}] [-p] [-u] -b @var{backing_file} [-F @var{backing_fmt}] @var{filename}
+ 
+ Changes the backing file of an image. Only the formats @code{qcow2} and
+ @code{qed} support changing the backing file.
+diff -urN qemu-1.0/qerror.c qemu-1.0.1/qerror.c
+--- qemu-1.0/qerror.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/qerror.c	2012-02-17 20:45:39.000000000 +0100
+@@ -235,6 +235,11 @@
+                      "supported by this qemu version: %(feature)",
+     },
+     {
++        .error_fmt = QERR_VIRTFS_FEATURE_BLOCKS_MIGRATION,
++        .desc      = "Migration is disabled when VirtFS export path '%(path)' "
++                     "is mounted in the guest using mount_tag '%(tag)'",
++    },
++    {
+         .error_fmt = QERR_VNC_SERVER_FAILED,
+         .desc      = "Could not start VNC server on %(target)",
+     },
+diff -urN qemu-1.0/qerror.h qemu-1.0.1/qerror.h
+--- qemu-1.0/qerror.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/qerror.h	2012-02-17 20:45:39.000000000 +0100
+@@ -192,6 +192,9 @@
+ #define QERR_UNKNOWN_BLOCK_FORMAT_FEATURE \
+     "{ 'class': 'UnknownBlockFormatFeature', 'data': { 'device': %s, 'format': %s, 'feature': %s } }"
+ 
++#define QERR_VIRTFS_FEATURE_BLOCKS_MIGRATION \
++    "{ 'class': 'VirtFSFeatureBlocksMigration', 'data': { 'path': %s, 'tag': %s } }"
++
+ #define QERR_VNC_SERVER_FAILED \
+     "{ 'class': 'VNCServerFailed', 'data': { 'target': %s } }"
+ 
+diff -urN qemu-1.0/target-cris/cpu.h qemu-1.0.1/target-cris/cpu.h
+--- qemu-1.0/target-cris/cpu.h	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-cris/cpu.h	2012-02-17 20:45:39.000000000 +0100
+@@ -67,6 +67,8 @@
+ #define Q_FLAG 0x80000000
+ #define M_FLAG 0x40000000
+ #define PFIX_FLAG 0x800      /* CRISv10 Only.  */
++#define F_FLAG_V10 0x400
++#define P_FLAG_V10 0x200
+ #define S_FLAG 0x200
+ #define R_FLAG 0x100
+ #define P_FLAG 0x80
+diff -urN qemu-1.0/target-cris/helper.c qemu-1.0.1/target-cris/helper.c
+--- qemu-1.0/target-cris/helper.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-cris/helper.c	2012-02-17 20:45:39.000000000 +0100
+@@ -157,6 +157,7 @@
+ 	/* Now that we are in kernel mode, load the handlers address.  */
+ 	env->pc = ldl_code(env->pregs[PR_EBP] + ex_vec * 4);
+ 	env->locked_irq = 1;
++	env->pregs[PR_CCS] |= F_FLAG_V10; /* set F.  */
+ 
+ 	qemu_log_mask(CPU_LOG_INT, "%s isr=%x vec=%x ccs=%x pid=%d erp=%x\n", 
+ 		      __func__, env->pc, ex_vec, 
+diff -urN qemu-1.0/target-cris/translate_v10.c qemu-1.0.1/target-cris/translate_v10.c
+--- qemu-1.0/target-cris/translate_v10.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-cris/translate_v10.c	2012-02-17 20:45:39.000000000 +0100
+@@ -62,6 +62,65 @@
+     t_gen_raise_exception(EXCP_BREAK);
+ }
+ 
++static void gen_store_v10_conditional(DisasContext *dc, TCGv addr, TCGv val,
++                       unsigned int size, int mem_index)
++{
++    int l1 = gen_new_label();
++    TCGv taddr = tcg_temp_local_new();
++    TCGv tval = tcg_temp_local_new();
++    TCGv t1 = tcg_temp_local_new();
++    dc->postinc = 0;
++    cris_evaluate_flags(dc);
++
++    tcg_gen_mov_tl(taddr, addr);
++    tcg_gen_mov_tl(tval, val);
++
++    /* Store only if F flag isn't set */
++    tcg_gen_andi_tl(t1, cpu_PR[PR_CCS], F_FLAG_V10);
++    tcg_gen_brcondi_tl(TCG_COND_NE, t1, 0, l1);
++    if (size == 1) {
++        tcg_gen_qemu_st8(tval, taddr, mem_index);
++    } else if (size == 2) {
++        tcg_gen_qemu_st16(tval, taddr, mem_index);
++    } else {
++        tcg_gen_qemu_st32(tval, taddr, mem_index);
++    }
++    gen_set_label(l1);
++    tcg_gen_shri_tl(t1, t1, 1);  /* shift F to P position */
++    tcg_gen_or_tl(cpu_PR[PR_CCS], cpu_PR[PR_CCS], t1); /*P=F*/
++    tcg_temp_free(t1);
++    tcg_temp_free(tval);
++    tcg_temp_free(taddr);
++}
++
++static void gen_store_v10(DisasContext *dc, TCGv addr, TCGv val,
++                       unsigned int size)
++{
++    int mem_index = cpu_mmu_index(dc->env);
++
++    /* If we get a fault on a delayslot we must keep the jmp state in
++       the cpu-state to be able to re-execute the jmp.  */
++    if (dc->delayed_branch == 1) {
++        cris_store_direct_jmp(dc);
++    }
++
++    /* Conditional writes. We only support the kind were X is known
++       at translation time.  */
++    if (dc->flagx_known && dc->flags_x) {
++        gen_store_v10_conditional(dc, addr, val, size, mem_index);
++        return;
++    }
++
++    if (size == 1) {
++        tcg_gen_qemu_st8(val, addr, mem_index);
++    } else if (size == 2) {
++        tcg_gen_qemu_st16(val, addr, mem_index);
++    } else {
++        tcg_gen_qemu_st32(val, addr, mem_index);
++    }
++}
++
++
+ /* Prefix flag and register are used to handle the more complex
+    addressing modes.  */
+ static void cris_set_prefix(DisasContext *dc)
+@@ -313,7 +372,8 @@
+     if (set) {
+         tcg_gen_ori_tl(cpu_PR[PR_CCS], cpu_PR[PR_CCS], flags);
+     } else {
+-        tcg_gen_andi_tl(cpu_PR[PR_CCS], cpu_PR[PR_CCS], ~flags);
++        tcg_gen_andi_tl(cpu_PR[PR_CCS], cpu_PR[PR_CCS],
++                        ~(flags|F_FLAG_V10|P_FLAG_V10));
+     }
+ 
+     dc->flags_uptodate = 1;
+@@ -723,7 +783,7 @@
+     LOG_DIS("move.%d $r%d, [$r%d]\n", dc->size, dc->src, dc->dst);
+     addr = tcg_temp_new();
+     crisv10_prepare_memaddr(dc, addr, size);
+-    gen_store(dc, addr, cpu_R[dc->dst], size);
++    gen_store_v10(dc, addr, cpu_R[dc->dst], size);
+     insn_len += crisv10_post_memaddr(dc, size);
+ 
+     return insn_len;
+@@ -767,10 +827,10 @@
+         t0 = tcg_temp_new();
+         cris_evaluate_flags(dc);
+         tcg_gen_andi_tl(t0, cpu_PR[PR_CCS], ~PFIX_FLAG);
+-        gen_store(dc, addr, t0, size);
++        gen_store_v10(dc, addr, t0, size);
+         tcg_temp_free(t0);
+     } else {
+-        gen_store(dc, addr, cpu_PR[dc->dst], size);
++        gen_store_v10(dc, addr, cpu_PR[dc->dst], size);
+     }
+     t0 = tcg_temp_new();
+     insn_len += crisv10_post_memaddr(dc, size);
+@@ -793,9 +853,9 @@
+     tcg_gen_mov_tl(t0, addr);
+     for (i = dc->dst; i >= 0; i--) {
+         if ((pfix && dc->mode == CRISV10_MODE_AUTOINC) && dc->src == i) {
+-            gen_store(dc, addr, t0, 4);
++            gen_store_v10(dc, addr, t0, 4);
+         } else {
+-            gen_store(dc, addr, cpu_R[i], 4);
++            gen_store_v10(dc, addr, cpu_R[i], 4);
+         }
+         tcg_gen_addi_tl(addr, addr, 4);
+     }
+diff -urN qemu-1.0/target-i386/translate.c qemu-1.0.1/target-i386/translate.c
+--- qemu-1.0/target-i386/translate.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-i386/translate.c	2012-02-17 20:45:39.000000000 +0100
+@@ -4870,20 +4870,23 @@
+             tcg_gen_sub_tl(t2, cpu_regs[R_EAX], t0);
+             gen_extu(ot, t2);
+             tcg_gen_brcondi_tl(TCG_COND_EQ, t2, 0, label1);
++            label2 = gen_new_label();
+             if (mod == 3) {
+-                label2 = gen_new_label();
+                 gen_op_mov_reg_v(ot, R_EAX, t0);
+                 tcg_gen_br(label2);
+                 gen_set_label(label1);
+                 gen_op_mov_reg_v(ot, rm, t1);
+-                gen_set_label(label2);
+             } else {
+-                tcg_gen_mov_tl(t1, t0);
++                /* perform no-op store cycle like physical cpu; must be
++                   before changing accumulator to ensure idempotency if
++                   the store faults and the instruction is restarted */
++                gen_op_st_v(ot + s->mem_index, t0, a0);
+                 gen_op_mov_reg_v(ot, R_EAX, t0);
++                tcg_gen_br(label2);
+                 gen_set_label(label1);
+-                /* always store */
+                 gen_op_st_v(ot + s->mem_index, t1, a0);
+             }
++            gen_set_label(label2);
+             tcg_gen_mov_tl(cpu_cc_src, t0);
+             tcg_gen_mov_tl(cpu_cc_dst, t2);
+             s->cc_op = CC_OP_SUBB + ot;
+diff -urN qemu-1.0/target-ppc/kvm.c qemu-1.0.1/target-ppc/kvm.c
+--- qemu-1.0/target-ppc/kvm.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-ppc/kvm.c	2012-02-17 20:45:39.000000000 +0100
+@@ -504,7 +504,7 @@
+ 
+ int kvm_arch_process_async_events(CPUState *env)
+ {
+-    return 0;
++    return env->halted;
+ }
+ 
+ static int kvmppc_handle_halt(CPUState *env)
+@@ -838,12 +838,18 @@
+     int fd;
+     void *table;
+ 
++    /* Must set fd to -1 so we don't try to munmap when called for
++     * destroying the table, which the upper layers -will- do
++     */
++    *pfd = -1;
+     if (!cap_spapr_tce) {
+         return NULL;
+     }
+ 
+     fd = kvm_vm_ioctl(kvm_state, KVM_CREATE_SPAPR_TCE, &args);
+     if (fd < 0) {
++        fprintf(stderr, "KVM: Failed to create TCE table for liobn 0x%x\n",
++                liobn);
+         return NULL;
+     }
+ 
+@@ -852,6 +858,8 @@
+ 
+     table = mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+     if (table == MAP_FAILED) {
++        fprintf(stderr, "KVM: Failed to map TCE table for liobn 0x%x\n",
++                liobn);
+         close(fd);
+         return NULL;
+     }
+@@ -871,8 +879,8 @@
+     len = (window_size / SPAPR_VIO_TCE_PAGE_SIZE)*sizeof(VIOsPAPR_RTCE);
+     if ((munmap(table, len) < 0) ||
+         (close(fd) < 0)) {
+-        fprintf(stderr, "KVM: Unexpected error removing KVM SPAPR TCE "
+-                "table: %s", strerror(errno));
++        fprintf(stderr, "KVM: Unexpected error removing TCE table: %s",
++                strerror(errno));
+         /* Leak the table */
+     }
+ 
+diff -urN qemu-1.0/target-s390x/kvm.c qemu-1.0.1/target-s390x/kvm.c
+--- qemu-1.0/target-s390x/kvm.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-s390x/kvm.c	2012-02-17 20:45:39.000000000 +0100
+@@ -185,9 +185,6 @@
+         return;
+     }
+ 
+-    s390_add_running_cpu(env);
+-    qemu_cpu_kick(env);
+-
+     kvmint.type = type;
+     kvmint.parm = parm;
+     kvmint.parm64 = parm64;
+diff -urN qemu-1.0/target-s390x/op_helper.c qemu-1.0.1/target-s390x/op_helper.c
+--- qemu-1.0/target-s390x/op_helper.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-s390x/op_helper.c	2012-02-17 20:45:39.000000000 +0100
+@@ -636,6 +636,9 @@
+         case 0x700:
+             cc = helper_xc(l, get_address(0, b1, d1), get_address(0, b2, d2));
+             break;
++        case 0xc00:
++            helper_tr(l, get_address(0, b1, d1), get_address(0, b2, d2));
++            break;
+         default:
+             goto abort;
+             break;
+diff -urN qemu-1.0/target-sh4/translate.c qemu-1.0.1/target-sh4/translate.c
+--- qemu-1.0/target-sh4/translate.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/target-sh4/translate.c	2012-02-17 20:45:39.000000000 +0100
+@@ -1652,18 +1652,10 @@
+ 	}
+ 	return;
+     case 0x00a3:		/* ocbp @Rn */
+-	{
+-	    TCGv dummy = tcg_temp_new();
+-	    tcg_gen_qemu_ld32s(dummy, REG(B11_8), ctx->memidx);
+-	    tcg_temp_free(dummy);
+-	}
+-	return;
+     case 0x00b3:		/* ocbwb @Rn */
+-	{
+-	    TCGv dummy = tcg_temp_new();
+-	    tcg_gen_qemu_ld32s(dummy, REG(B11_8), ctx->memidx);
+-	    tcg_temp_free(dummy);
+-	}
++        /* These instructions are supposed to do nothing in case of
++           a cache miss. Given that we only partially emulate caches
++           it is safe to simply ignore them. */
+ 	return;
+     case 0x0083:		/* pref @Rn */
+ 	return;
+diff -urN qemu-1.0/trace-events qemu-1.0.1/trace-events
+--- qemu-1.0/trace-events	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/trace-events	2012-02-17 20:45:39.000000000 +0100
+@@ -579,11 +579,11 @@
+ v9fs_lcreate_return(uint16_t tag, uint8_t id, int8_t type, int32_t version, int64_t path, int32_t iounit) "tag %d id %d qid={type %d version %d path %"PRId64"} iounit %d"
+ v9fs_fsync(uint16_t tag, uint8_t id, int32_t fid, int datasync) "tag %d id %d fid %d datasync %d"
+ v9fs_clunk(uint16_t tag, uint8_t id, int32_t fid) "tag %d id %d fid %d"
+-v9fs_read(uint16_t tag, uint8_t id, int32_t fid, int64_t off, int32_t max_count) "tag %d id %d fid %d off %"PRId64" max_count %d"
++v9fs_read(uint16_t tag, uint8_t id, int32_t fid, uint64_t off, uint32_t max_count) "tag %d id %d fid %d off %"PRIu64" max_count %u"
+ v9fs_read_return(uint16_t tag, uint8_t id, int32_t count, ssize_t err) "tag %d id %d count %d err %zd"
+-v9fs_readdir(uint16_t tag, uint8_t id, int32_t fid, int64_t offset, int32_t max_count) "tag %d id %d fid %d offset %"PRId64" max_count %d"
+-v9fs_readdir_return(uint16_t tag, uint8_t id, int32_t count, ssize_t retval) "tag %d id %d count %d retval %zd"
+-v9fs_write(uint16_t tag, uint8_t id, int32_t fid, int64_t off, int32_t count, int cnt) "tag %d id %d fid %d off %"PRId64" count %d cnt %d"
++v9fs_readdir(uint16_t tag, uint8_t id, int32_t fid, uint64_t offset, uint32_t max_count) "tag %d id %d fid %d offset %"PRIu64" max_count %u"
++v9fs_readdir_return(uint16_t tag, uint8_t id, uint32_t count, ssize_t retval) "tag %d id %d count %u retval %zd"
++v9fs_write(uint16_t tag, uint8_t id, int32_t fid, uint64_t off, uint32_t count, int cnt) "tag %d id %d fid %d off %"PRIu64" count %u cnt %d"
+ v9fs_write_return(uint16_t tag, uint8_t id, int32_t total, ssize_t err) "tag %d id %d total %d err %zd"
+ v9fs_create(uint16_t tag, uint8_t id, int32_t fid, char* name, int32_t perm, int8_t mode) "tag %d id %d fid %d name %s perm %d mode %d"
+ v9fs_create_return(uint16_t tag, uint8_t id, int8_t type, int32_t version, int64_t path, int iounit) "tag %d id %d qid={type %d version %d path %"PRId64"} iounit %d"
+diff -urN qemu-1.0/usb-linux.c qemu-1.0.1/usb-linux.c
+--- qemu-1.0/usb-linux.c	2011-12-01 21:07:34.000000000 +0100
++++ qemu-1.0.1/usb-linux.c	2012-02-17 20:45:39.000000000 +0100
+@@ -116,6 +116,7 @@
+     USBDevice dev;
+     int       fd;
+     int       hub_fd;
++    int       hub_port;
+ 
+     uint8_t   descr[8192];
+     int       descr_len;
+@@ -434,7 +435,7 @@
+ {
+ #ifdef USBDEVFS_CLAIM_PORT
+     char *h, hub_name[64], line[1024];
+-    int hub_addr, portnr, ret;
++    int hub_addr, ret;
+ 
+     snprintf(hub_name, sizeof(hub_name), "%d-%s",
+              s->match.bus_num, s->match.port);
+@@ -442,13 +443,13 @@
+     /* try strip off last ".$portnr" to get hub */
+     h = strrchr(hub_name, '.');
+     if (h != NULL) {
+-        portnr = atoi(h+1);
++        s->hub_port = atoi(h+1);
+         *h = '\0';
+     } else {
+         /* no dot in there -> it is the root hub */
+         snprintf(hub_name, sizeof(hub_name), "usb%d",
+                  s->match.bus_num);
+-        portnr = atoi(s->match.port);
++        s->hub_port = atoi(s->match.port);
+     }
+ 
+     if (!usb_host_read_file(line, sizeof(line), "devnum",
+@@ -469,20 +470,32 @@
+         return -1;
+     }
+ 
+-    ret = ioctl(s->hub_fd, USBDEVFS_CLAIM_PORT, &portnr);
++    ret = ioctl(s->hub_fd, USBDEVFS_CLAIM_PORT, &s->hub_port);
+     if (ret < 0) {
+         close(s->hub_fd);
+         s->hub_fd = -1;
+         return -1;
+     }
+ 
+-    trace_usb_host_claim_port(s->match.bus_num, hub_addr, portnr);
++    trace_usb_host_claim_port(s->match.bus_num, hub_addr, s->hub_port);
+     return 0;
+ #else
+     return -1;
+ #endif
+ }
+ 
++static void usb_host_release_port(USBHostDevice *s)
++{
++    if (s->hub_fd == -1) {
++        return;
++    }
++#ifdef USBDEVFS_RELEASE_PORT
++    ioctl(s->hub_fd, USBDEVFS_RELEASE_PORT, &s->hub_port);
++#endif
++    close(s->hub_fd);
++    s->hub_fd = -1;
++}
++
+ static int usb_host_disconnect_ifaces(USBHostDevice *dev, int nb_interfaces)
+ {
+     /* earlier Linux 2.4 do not support that */
+@@ -635,10 +648,8 @@
+ {
+     USBHostDevice *s = (USBHostDevice *)dev;
+ 
++    usb_host_release_port(s);
+     usb_host_close(s);
+-    if (s->hub_fd != -1) {
+-        close(s->hub_fd);
+-    }
+     QTAILQ_REMOVE(&hostdevs, s, next);
+     qemu_remove_exit_notifier(&s->exit);
+ }
+@@ -1141,15 +1152,18 @@
+     length = s->descr_len - 18;
+     i = 0;
+ 
+-    if (descriptors[i + 1] != USB_DT_CONFIG ||
+-        descriptors[i + 5] != s->configuration) {
+-        fprintf(stderr, "invalid descriptor data - configuration %d\n",
+-                s->configuration);
+-        return 1;
+-    }
+-    i += descriptors[i];
+-
+     while (i < length) {
++        if (descriptors[i + 1] != USB_DT_CONFIG) {
++            fprintf(stderr, "invalid descriptor data\n");
++            return 1;
++        } else if (descriptors[i + 5] != s->configuration) {
++            DPRINTF("not requested configuration %d\n", s->configuration);
++            i += (descriptors[i + 3] << 8) + descriptors[i + 2];
++            continue;
++        }
++
++        i += descriptors[i];
++
+         if (descriptors[i + 1] != USB_DT_INTERFACE ||
+             (descriptors[i + 1] == USB_DT_INTERFACE &&
+              descriptors[i + 4] == 0)) {
+@@ -1399,6 +1413,7 @@
+ {
+     USBHostDevice *s = container_of(n, USBHostDevice, exit);
+ 
++    usb_host_release_port(s);
+     if (s->fd != -1) {
+         usb_host_do_reset(s);;
+     }

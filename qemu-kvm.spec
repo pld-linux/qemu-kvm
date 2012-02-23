@@ -33,34 +33,8 @@ Patch1:		Fix_save-restore_of_in-kernel_i8259.patch
 Patch2:		enable_architectural_PMU_cpuid_leaf.patch
 Patch3:		qemu_virtio-scsi_support.patch
 Patch4:		qemu-kvm-cflags.patch
-# Patches queued for 1.0.1 stable
-Patch101:	0001-malta-Fix-regression-i8259-interrupts-did-not-work.patch
-Patch102:	0002-exec.c-Fix-subpage-memory-access-to-RAM-MemoryRegion.patch
-Patch103:	0003-hw-9pfs-Improve-portability-to-older-systems.patch
-Patch104:	0004-hw-9pfs-use-migration-blockers-to-prevent-live-migra.patch
-Patch105:	0005-hw-9pfs-Reset-server-state-during-TVERSION.patch
-Patch106:	0006-hw-9pfs-Add-qdev.reset-callback-for-virtio-9p-pci-de.patch
-Patch107:	0007-hw-9pfs-Use-the-correct-file-descriptor-in-Fsdriver-.patch
-Patch108:	0008-hw-9pfs-replace-iovec-manipulation-with-QEMUIOVector.patch
-Patch109:	0009-hw-9pfs-Use-the-correct-signed-type-for-different-va.patch
-Patch110:	0010-target-i386-fix-cmpxchg-instruction-emulation.patch
-Patch111:	0011-configure-Enable-build-by-default-PIE-read-only-relo.patch
-Patch112:	0012-cris-Handle-conditional-stores-on-CRISv10.patch
-Patch113:	0013-pc-add-pc-0.15.patch
-Patch114:	0014-pc-fix-event_idx-compatibility-for-virtio-devices.patch
-Patch115:	0015-Fix-parse-of-usb-device-description-with-multiple-co.patch
-Patch116:	0016-usb-storage-cancel-I-O-on-reset.patch
-Patch117:	0017-usb-host-properly-release-port-on-unplug-exit.patch
-Patch118:	0018-usb-ohci-td.cbp-incorrectly-updated-near-page-end.patch
-Patch119:	0019-target-sh4-ignore-ocbp-and-ocbwb-instructions.patch
-Patch120:	0020-PPC-Fix-linker-scripts-on-ppc-hosts.patch
-Patch121:	0021-qiov-prevent-double-free-or-use-after-free.patch
-Patch122:	0022-coroutine-switch-per-thread-free-pool-to-a-global-po.patch
-Patch123:	0023-qemu-img-rebase-Fix-for-undersized-backing-files.patch
-Patch124:	0024-Documentation-Add-qemu-img-t-parameter-in-man-page.patch
-Patch125:	0025-rbd-always-set-out-parameter-in-qemu_rbd_snap_list.patch
-Patch126:	0026-e1000-bounds-packet-size-against-buffer-size.patch
-Patch127:	virtio-blk_refuse_SG_IO_requests_with_scsi_off.patch
+# Update to qemu 1.0.1
+Patch100:	qemu-1.0.1.patch
 URL:		http://www.linux-kvm.org/
 BuildRequires:	SDL-devel >= 1.2.1
 BuildRequires:	alsa-lib-devel
@@ -352,33 +326,7 @@ This package does not need to be installed on the host OS.
 %patch3 -p1
 %patch4 -p1
 
-%patch101 -p1
-%patch102 -p1
-%patch103 -p1
-%patch104 -p1
-%patch105 -p1
-%patch106 -p1
-%patch107 -p1
-%patch108 -p1
-%patch109 -p1
-%patch110 -p1
-%patch111 -p1
-%patch112 -p1
-%patch113 -p1
-%patch114 -p1
-%patch115 -p1
-%patch116 -p1
-%patch117 -p1
-%patch118 -p1
-%patch119 -p1
-%patch120 -p1
-%patch121 -p1
-%patch122 -p1
-%patch123 -p1
-%patch124 -p1
-%patch125 -p1
-%patch126 -p1
-%patch127 -p1
+%patch100 -p1
 
 cp -a %{SOURCE1} pc-bios/bios.bin
 
