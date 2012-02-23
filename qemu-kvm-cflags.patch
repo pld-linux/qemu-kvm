@@ -1,0 +1,13 @@
+--- qemu-kvm-1.0/configure~	2012-02-22 11:45:58.440892282 +0100
++++ qemu-kvm-1.0/configure	2012-02-23 10:24:12.692463270 +0100
+@@ -2781,10 +2781,6 @@
+ # End of CC checks
+ # After here, no more $cc or $ld runs
+ 
+-if test "$debug" = "no" ; then
+-  CFLAGS="-O2 $CFLAGS"
+-fi
+-
+ # Consult white-list to determine whether to enable werror
+ # by default.  Only enable by default for git builds
+ z_version=`cut -f3 -d. $source_path/VERSION`
