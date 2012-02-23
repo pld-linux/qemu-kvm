@@ -32,6 +32,7 @@ Patch1:		Fix_save-restore_of_in-kernel_i8259.patch
 # Feature patches, should be in 1.1 before release
 Patch2:		enable_architectural_PMU_cpuid_leaf.patch
 Patch3:		qemu_virtio-scsi_support.patch
+Patch4:		qemu-kvm-cflags.patch
 # Patches queued for 1.0.1 stable
 Patch101:	0001-malta-Fix-regression-i8259-interrupts-did-not-work.patch
 Patch102:	0002-exec.c-Fix-subpage-memory-access-to-RAM-MemoryRegion.patch
@@ -63,46 +64,48 @@ Patch127:	virtio-blk_refuse_SG_IO_requests_with_scsi_off.patch
 URL:		http://www.linux-kvm.org/
 BuildRequires:	SDL-devel >= 1.2.1
 BuildRequires:	alsa-lib-devel
-# For Braille device support                                                        
-BuildRequires:	brlapi-devel
 BuildRequires:	bluez-libs-devel
-# For test suite                                                                    
+BuildRequires:	brlapi-devel
+BuildRequires:	ceph-devel
 BuildRequires:	check-devel
 BuildRequires:	gnutls-devel
+BuildRequires:	libaio-devel
+BuildRequires:	libevent-devel
+BuildRequires:	libfdt-devel
+BuildRequires:	libiscsi-devel
 BuildRequires:	ncurses-devel
 BuildRequires:	pciutils-devel
 BuildRequires:	perl-Encode
 BuildRequires:	perl-tools-pod
 BuildRequires:	pkgconfig
-BuildRequires:	sed >= 4.0
-BuildRequires:	texi2html
-BuildRequires:	which
-BuildRequires:	xorg-lib-libX11-devel
 BuildRequires:	pulseaudio-devel
-# LinuxAIO support
-BuildRequires:	libaio-devel
-BuildRequires:	libevent-devel
-# For FDT device tree support
-BuildRequires:	libfdt-devel
 BuildRequires:	rpmbuild(macros) >= 1.644
+BuildRequires:	sed >= 4.0
 %if %{with spice}
 BuildRequires:	spice-protocol
 BuildRequires:	spice-server-devel
 %endif
-Requires(postun):	/usr/sbin/groupdel
-Requires(postun):	/usr/sbin/userdel
-Requires(pre):	/bin/id
-Requires(pre):	/usr/bin/getgid
-Requires(pre):	/usr/sbin/groupadd
-Requires(pre):	/usr/sbin/useradd
-Provides:	group(kvm)
-Requires:	SDL >= 1.2.1
-Requires:	systemd-units >= 38
-Obsoletes:	qemu < %{version}
-Obsoletes:	kvm
+BuildRequires:	texi2html
+BuildRequires:	usbredir-devel
+BuildRequires:	which
+BuildRequires:	xorg-lib-libX11-devel
+Requires:	%{name}-img = %{version}-%{release}
+Requires:	%{name}-system-alpha = %{version}-%{release}
+Requires:	%{name}-system-arm = %{version}-%{release}
+Requires:	%{name}-system-cris = %{version}-%{release}
+Requires:	%{name}-system-lm32 = %{version}-%{release}
+Requires:	%{name}-system-m68k = %{version}-%{release}
+Requires:	%{name}-system-microblaze = %{version}-%{release}
+Requires:	%{name}-system-mips = %{version}-%{release}
+Requires:	%{name}-system-ppc = %{version}-%{release}
+Requires:	%{name}-system-s390x = %{version}-%{release}
+Requires:	%{name}-system-sh4 = %{version}-%{release}
+Requires:	%{name}-system-sparc = %{version}-%{release}
+Requires:	%{name}-system-x86 = %{version}-%{release}
+Requires:	%{name}-system-xtensa = %{version}-%{release}
+Requires:	%{name}-user = %{version}-%{release}
 Provides:	qemu = %{version}-%{release}
-# sparc is currently unsupported (missing cpu_get_real_ticks() impl in vl.c)
-ExclusiveArch:	%{ix86} %{x8664} %{?with_userspace:ppc}
+Obsoletes:	qemu
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 # some PPC/SPARC boot image in ELF format
@@ -139,6 +142,192 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
   używane do wirtualnego hostowania kilku wirtualnych pecetów na
   pojedynczym serwerze.
 
+%package  common
+Summary:	QEMU common files needed by all QEMU targets
+Group:		Development/Tools
+Requires(postun):	/usr/sbin/groupdel
+Requires(postun):	/usr/sbin/userdel
+Requires(pre):	/bin/id
+Requires(pre):	/usr/bin/getgid
+Requires(pre):	/usr/sbin/groupadd
+Requires(pre):	/usr/sbin/useradd
+Requires:	SDL >= 1.2.1
+Provides:	group(kvm)
+Requires:	systemd-units >= 38
+Conflicts:	qemu-kvm < 1.0-3
+
+%description common
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the common files needed by all QEMU targets.
+
+%package  img
+Summary:	QEMU command line tool for manipulating disk images
+Group:		Development/Tools
+Conflicts:	qemu-kvm < 1.0-3
+
+%description img
+This package provides a command line tool for manipulating disk images
+
+%package user
+Summary:	QEMU user mode emulation of qemu targets
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+Requires:	systemd-units >= 38
+
+%description user
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the user mode emulation of QEMU targets.
+
+%package system-alpha
+Summary:	QEMU system emulator for alpha
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-alpha
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for alpha.
+
+%package system-arm
+Summary:	QEMU system emulator for arm
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-arm
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for arm.
+
+%package system-cris
+Summary:	QEMU system emulator for cris
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-cris
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for cris.
+
+%package system-lm32
+Summary:	QEMU system emulator for lm32
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-lm32
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for lm32.
+
+%package system-m68k
+Summary:	QEMU system emulator for m68k
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-m68k
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for m68k.
+
+%package system-microblaze
+Summary:	QEMU system emulator for microblaze
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-microblaze
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for microblaze.
+
+%package system-mips
+Summary:	QEMU system emulator for mips
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-mips
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for mips.
+
+%package system-ppc
+Summary:	QEMU system emulator for ppc
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-ppc
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for ppc.
+
+%package system-s390x
+Summary:	QEMU system emulator for s390x
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-s390x
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for s390x.
+
+%package system-sh4
+Summary:	QEMU system emulator for sh4
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-sh4
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for sh4.
+
+%package system-sparc
+Summary:	QEMU system emulator for sparc
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-sparc
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for sparc/sparc64.
+
+%package system-x86
+Summary:	QEMU system emulator for x86
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+Obsoletes:	kvm
+
+%description system-x86
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for x86. When being run in a
+x86 machine that supports it, this package also provides the KVM
+virtualization platform.
+
+%package system-xtensa
+Summary:	QEMU system emulator for xtensa
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-xtensa
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator for xtensa.
+
 %package guest-agent
 Summary:	QEMU guest agent
 Group:		Daemons
@@ -161,6 +350,7 @@ This package does not need to be installed on the host OS.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
 
 %patch101 -p1
 %patch102 -p1
@@ -200,6 +390,7 @@ ln -s ../error.h qapi/error.h
 ./configure \
 	--target-list="x86_64-softmmu" \
 	--extra-cflags="%{rpmcflags} -I/usr/include/ncurses" \
+	--extra-ldflags="%{rpmldflags}" \
 	--prefix=%{_prefix} \
 	--sysconfdir=%{_sysconfdir} \
 	--cc="%{__cc}" \
@@ -237,6 +428,7 @@ cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
 ./configure \
 	--target-list="" \
 	--extra-cflags="%{rpmcflags} -I/usr/include/ncurses" \
+	--extra-ldflags="%{rpmldflags}" \
 	--prefix=%{_prefix} \
 	--sysconfdir=%{_sysconfdir} \
 	--cc="%{__cc}" \
@@ -337,17 +529,16 @@ done < %{SOURCE2}
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%pre
+%pre common
 %groupadd -g 160 kvm
 %groupadd -g 276 qemu
 %useradd -u 276 -g qemu -G kvm -c "QEMU User" qemu
 
-%post
+%post common
 %systemd_post ksm.service
 %systemd_post ksmtuned.service
-%systemd_post systemd-binfmt.service
 
-%preun
+%preun common
 %systemd_preun ksm.service
 %systemd_preun ksmtuned.service
 
@@ -358,11 +549,16 @@ if [ "$1" = "0" ]; then
 	%groupremove kvm
 fi
 %systemd_reload
-%systemd_post systemd-binfmt.service
 
-%triggerpostun -- %{name} < 1.0
+%triggerpostun common -- %{name} < 1.0-3
 %systemd_trigger ksm.service
 %systemd_trigger ksmtuned.service
+
+%post user
+%systemd_post systemd-binfmt.service
+
+%postun user
+%systemd_post systemd-binfmt.service
 
 %post guest-agent
 %systemd_reload
@@ -373,7 +569,7 @@ fi
 %postun guest-agent
 %systemd_reload
 
-%files
+%files common
 %defattr(644,root,root,755)
 %doc README qemu-doc.html qemu-tech.html
 %attr(755,root,root) %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/qemu-ifup
@@ -384,27 +580,41 @@ fi
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/ksm
 %{systemdunitdir}/ksm.service
 %{systemdunitdir}/ksmtuned.service
-%ifarch %{ix86} %{x8664}
-%config(noreplace) %verify(not md5 mtime size) /etc/modules-load.d/kvm.conf
-%config(noreplace) %verify(not md5 mtime size) /etc/udev/rules.d/80-kvm.rules
-%attr(755,root,root) %{_bindir}/qemu-kvm
-%endif
-%attr(755,root,root) %{_bindir}/kvm_stat
+%attr(755,root,root) %{_bindir}/qemu-nbd
 %attr(755,root,root) %{_sbindir}/ksmctl
 %attr(755,root,root) %{_sbindir}/ksmtuned
+%{_mandir}/man1/qemu.1*
+%{_mandir}/man8/qemu-nbd.8*
+
+%dir %{_datadir}/qemu
+%{_datadir}/qemu/keymaps
+# various bios images
+%{_datadir}/qemu/*.bin
+%{_datadir}/qemu/*.rom
+%{_datadir}/qemu/*.dtb
+%{_datadir}/qemu/openbios-ppc
+%{_datadir}/qemu/openbios-sparc*
+%{_datadir}/qemu/palcode-clipper
+
+%files img
+%defattr(644,root,root,755)
+%attr(755,root,root) %{_bindir}/qemu-img
+%{_mandir}/man1/qemu-img.1*
+
+%files user
+%defattr(644,root,root,755)
+/usr/lib/binfmt.d/qemu-*.conf
 %attr(755,root,root) %{_bindir}/qemu-alpha
 %attr(755,root,root) %{_bindir}/qemu-arm
 %attr(755,root,root) %{_bindir}/qemu-armeb
 %attr(755,root,root) %{_bindir}/qemu-cris
 %attr(755,root,root) %{_bindir}/qemu-i386
-%attr(755,root,root) %{_bindir}/qemu-img
 %attr(755,root,root) %{_bindir}/qemu-io
 %attr(755,root,root) %{_bindir}/qemu-m68k
 %attr(755,root,root) %{_bindir}/qemu-microblaze
 %attr(755,root,root) %{_bindir}/qemu-microblazeel
 %attr(755,root,root) %{_bindir}/qemu-mips
 %attr(755,root,root) %{_bindir}/qemu-mipsel
-%attr(755,root,root) %{_bindir}/qemu-nbd
 %attr(755,root,root) %{_bindir}/qemu-ppc
 %attr(755,root,root) %{_bindir}/qemu-ppc64
 %attr(755,root,root) %{_bindir}/qemu-ppc64abi32
@@ -414,39 +624,76 @@ fi
 %attr(755,root,root) %{_bindir}/qemu-sparc
 %attr(755,root,root) %{_bindir}/qemu-sparc32plus
 %attr(755,root,root) %{_bindir}/qemu-sparc64
+%attr(755,root,root) %{_bindir}/qemu-unicore32
+%attr(755,root,root) %{_bindir}/qemu-x86_64
+
+%files system-alpha
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-alpha
+
+%files system-arm
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-arm
+
+%files system-cris
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-cris
-%attr(755,root,root) %{_bindir}/qemu-system-i386
+
+%files system-lm32
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-lm32
+
+%files system-m68k
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-m68k
+
+%files system-microblaze
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-microblaze
 %attr(755,root,root) %{_bindir}/qemu-system-microblazeel
+
+%files system-mips
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-mips
+%attr(755,root,root) %{_bindir}/qemu-system-mipsel
 %attr(755,root,root) %{_bindir}/qemu-system-mips64
 %attr(755,root,root) %{_bindir}/qemu-system-mips64el
-%attr(755,root,root) %{_bindir}/qemu-system-mipsel
+
+%files system-ppc
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-ppc
 %attr(755,root,root) %{_bindir}/qemu-system-ppc64
 %attr(755,root,root) %{_bindir}/qemu-system-ppcemb
+
+%files system-s390x
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-s390x
+
+%files system-sh4
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-sh4
 %attr(755,root,root) %{_bindir}/qemu-system-sh4eb
+
+%files system-sparc
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-sparc
 %attr(755,root,root) %{_bindir}/qemu-system-sparc64
+
+%files system-x86
+%defattr(644,root,root,755)
+%ifarch %{ix86} %{x8664}
+%config(noreplace) %verify(not md5 mtime size) /etc/modules-load.d/kvm.conf
+%config(noreplace) %verify(not md5 mtime size) /etc/udev/rules.d/80-kvm.rules
+%endif
+%attr(755,root,root) %{_bindir}/kvm_stat
+%attr(755,root,root) %{_bindir}/qemu-kvm
+%attr(755,root,root) %{_bindir}/qemu-system-i386
 %attr(755,root,root) %{_bindir}/qemu-system-x86_64
+
+%files system-xtensa
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-xtensa
 %attr(755,root,root) %{_bindir}/qemu-system-xtensaeb
-%attr(755,root,root) %{_bindir}/qemu-unicore32
-%attr(755,root,root) %{_bindir}/qemu-x86_64
-/usr/lib/binfmt.d/qemu-arm.conf
-/usr/lib/binfmt.d/qemu-ppc.conf
-/usr/lib/binfmt.d/qemu-sh4.conf
-/usr/lib/binfmt.d/qemu-sparc.conf
-%{_datadir}/qemu
-%{_mandir}/man1/qemu.1*
-%{_mandir}/man1/qemu-img.1*
-%{_mandir}/man8/qemu-nbd.8*
 
 %files guest-agent
 %config(noreplace) %verify(not md5 mtime size) /etc/udev/rules.d/99-qemu-guest-agent.rules
