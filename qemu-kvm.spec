@@ -6,7 +6,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.0
-Release:	4
+Release:	5
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
@@ -490,7 +490,7 @@ rm -rf $RPM_BUILD_ROOT
 %systemd_preun ksm.service
 %systemd_preun ksmtuned.service
 
-%postun
+%postun common
 if [ "$1" = "0" ]; then
 	%userremove qemu
 	%groupremove qemu
