@@ -6,7 +6,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.0
-Release:	6
+Release:	7
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
@@ -125,6 +125,7 @@ Requires(pre):	/bin/id
 Requires(pre):	/usr/bin/getgid
 Requires(pre):	/usr/sbin/groupadd
 Requires(pre):	/usr/sbin/useradd
+Requires(post,preun,postun):	systemd-units >= 38
 Requires:	SDL >= 1.2.1
 Provides:	group(kvm)
 Provides:	qemu-common
@@ -149,6 +150,7 @@ This package provides a command line tool for manipulating disk images
 Summary:	QEMU user mode emulation of qemu targets
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
+Requires(post,postun):	systemd-units >= 38
 Requires:	systemd-units >= 38
 
 %description user
@@ -306,6 +308,7 @@ This package provides the system emulator for xtensa.
 %package guest-agent
 Summary:	QEMU guest agent
 Group:		Daemons
+Requires(post,preun,postun):	systemd-units >= 38
 Requires:	systemd-units >= 38
 
 %description guest-agent
