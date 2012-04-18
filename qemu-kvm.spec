@@ -6,7 +6,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.0
-Release:	7
+Release:	8
 License:	GPL
 Group:		Applications/Emulators
 Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
@@ -507,10 +507,10 @@ fi
 %systemd_trigger ksmtuned.service
 
 %post user
-%systemd_post systemd-binfmt.service
+%systemd_service_restart systemd-binfmt.service
 
 %postun user
-%systemd_post systemd-binfmt.service
+%systemd_service_restart systemd-binfmt.service
 
 %post guest-agent
 %systemd_reload
