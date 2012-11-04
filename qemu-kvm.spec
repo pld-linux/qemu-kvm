@@ -433,9 +433,19 @@ a good emulation speed by using dynamic translation.
 
 This package provides an agent to run inside guests, which
 communicates with the host over a virtio-serial channel named
-"org.qemu.guest_agent.0"
+"org.qemu.guest_agent.0".
 
 This package does not need to be installed on the host OS.
+
+%description guest-agent -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet udostępnia agenta przeznaczonego do uruchomienia w
+systemach-gościach, komunikującego się kanałem virtio-serial o nazwie
+"org.qemu.guest_agent.0".
+
+Ten pakiet nie musi być zainstalowany w systemie hosta.
 
 %prep
 %setup -q
@@ -529,7 +539,7 @@ cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
 
 %{__make} V=99
 
-gcc %{SOURCE7} %{rpmcflags} -g -o ksmctl
+%{__cc} %{SOURCE7} %{rpmcflags} -o ksmctl
 
 %install
 rm -rf $RPM_BUILD_ROOT
