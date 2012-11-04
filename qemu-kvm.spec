@@ -9,7 +9,7 @@ Version:	1.0
 Release:	8
 License:	GPL
 Group:		Applications/Emulators
-Source0:	http://dl.sourceforge.net/project/kvm/qemu-kvm/%{version}/%{name}-%{version}.tar.gz
+Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
 # Source0-md5:	00a825db46a70ba8ef9fc95da9cc7c1e
 Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
 # Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
@@ -116,8 +116,9 @@ aby działał na kolejnych procesorach. QEMU ma dwa tryby pracy:
   używane do wirtualnego hostowania kilku wirtualnych pecetów na
   pojedynczym serwerze.
 
-%package  common
+%package common
 Summary:	QEMU common files needed by all QEMU targets
+Summary(pl.UTF-8):	Wspólne pliki QEMU wymagane przez wszystkie środowiska QEMU
 Group:		Development/Tools
 Requires(postun):	/usr/sbin/groupdel
 Requires(postun):	/usr/sbin/userdel
@@ -138,16 +139,30 @@ good emulation speed by using dynamic translation.
 
 This package provides the common files needed by all QEMU targets.
 
-%package  img
+%description common -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet udostępnia wspólne pliki wymagane przez wszystkie
+środowiska QEMU.
+
+%package img
 Summary:	QEMU command line tool for manipulating disk images
+Summary(pl.UTF-8):	Narzędzie QEMU do operacji na obrazach dysków
 Group:		Development/Tools
 Conflicts:	qemu-kvm < 1.0-3
 
 %description img
-This package provides a command line tool for manipulating disk images
+This package provides a command line tool for manipulating disk
+images.
+
+%description img -l pl.UTF-8
+Ten pakiet udostępnia działające z linii poleceń narzędzia do operacji
+na obrazach dysków.
 
 %package user
 Summary:	QEMU user mode emulation of qemu targets
+Summary(pl.UTF-8):	QEMU - emulacja trybu użytkownika środowisk qemu
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 Requires(post,postun):	systemd-units >= 38
@@ -159,8 +174,15 @@ good emulation speed by using dynamic translation.
 
 This package provides the user mode emulation of QEMU targets.
 
+%description user -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet udostępnia emulację trybu użytkownika środowisk QEMU.
+
 %package system-alpha
-Summary:	QEMU system emulator for alpha
+Summary:	QEMU system emulator for Alpha
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem Alpha
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -168,10 +190,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for alpha.
+This package provides the system emulator with Alpha CPU.
+
+%description system-alpha -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem Alpha.
 
 %package system-arm
-Summary:	QEMU system emulator for arm
+Summary:	QEMU system emulator for ARM
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem ARM
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -179,10 +208,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for arm.
+This package provides the system emulator for ARM.
+
+%description system-arm -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem ARM.
 
 %package system-cris
-Summary:	QEMU system emulator for cris
+Summary:	QEMU system emulator for CRIS
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem CRIS
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -190,10 +226,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for cris.
+This package provides the system emulator with CRIS CPU.
+
+%description system-cris -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem CRIS.
 
 %package system-lm32
-Summary:	QEMU system emulator for lm32
+Summary:	QEMU system emulator for LM32
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem LM32
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -201,10 +244,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for lm32.
+This package provides the system emulator with LM32 CPU.
+
+%description system-lm32 -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem LM32.
 
 %package system-m68k
 Summary:	QEMU system emulator for m68k
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem m68k
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -212,10 +262,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for m68k.
+This package provides the system emulator with m68k CPU.
+
+%description system-m68k -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem m68k.
 
 %package system-microblaze
-Summary:	QEMU system emulator for microblaze
+Summary:	QEMU system emulator for MicroBlaze
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem MicroBlaze
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -223,10 +280,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for microblaze.
+This package provides the system emulator with MicroBlaze CPU.
+
+%description system-microblaze -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem MicroBlaze.
 
 %package system-mips
-Summary:	QEMU system emulator for mips
+Summary:	QEMU system emulator for MIPS
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem MIPS
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -234,10 +298,18 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for mips.
+This package provides the system emulator with MIPS CPU.
+
+%description system-mips -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem MIPS.
+
 
 %package system-ppc
-Summary:	QEMU system emulator for ppc
+Summary:	QEMU system emulator for PowerPC
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem PowerPC
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -245,10 +317,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for ppc.
+This package provides the system emulator with PowerPC CPU.
+
+%description system-ppc -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem PowerPC.
 
 %package system-s390x
-Summary:	QEMU system emulator for s390x
+Summary:	QEMU system emulator for S390
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem S390
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -256,10 +335,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for s390x.
+This package provides the system emulator with S390 CPU.
+
+%description system-s390x -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem S390.
 
 %package system-sh4
-Summary:	QEMU system emulator for sh4
+Summary:	QEMU system emulator for SH4
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem SH4
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -267,10 +353,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for sh4.
+This package provides the system emulator with SH4 CPU.
+
+%description system-sh4 -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem SH4.
 
 %package system-sparc
-Summary:	QEMU system emulator for sparc
+Summary:	QEMU system emulator for SPARC
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem SPARC
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -278,10 +371,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for sparc/sparc64.
+This package provides the system emulator with SPARC/SPARC64 CPU.
+
+%description system-sparc -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem SPARC/SPARC64.
 
 %package system-x86
 Summary:	QEMU system emulator for x86
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem x86
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 Obsoletes:	kvm
@@ -290,12 +390,21 @@ Obsoletes:	kvm
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for x86. When being run in a
-x86 machine that supports it, this package also provides the KVM
+This package provides the system emulator with x86 CPU. When being run
+in a x86 machine that supports it, this package also provides the KVM
 virtualization platform.
 
+%description system-x86 -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem x86. W przypadku
+uruchomienia na maszynie x86 pozwalającej na to, ten pakiet udostępnia
+także platformę wirtualizacji KVM.
+
 %package system-xtensa
-Summary:	QEMU system emulator for xtensa
+Summary:	QEMU system emulator for Xtensa
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem Xtensa
 Group:		Development/Tools
 Requires:	%{name}-common = %{version}-%{release}
 
@@ -303,10 +412,17 @@ Requires:	%{name}-common = %{version}-%{release}
 QEMU is a generic and open source processor emulator which achieves a
 good emulation speed by using dynamic translation.
 
-This package provides the system emulator for xtensa.
+This package provides the system emulator with Xtensa CPU.
+
+%description system-xtensa -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem Xtensa.
 
 %package guest-agent
 Summary:	QEMU guest agent
+Summary(pl.UTF-8):	Agent gościa QEMU
 Group:		Daemons
 Requires(post,preun,postun):	systemd-units >= 38
 Requires:	systemd-units >= 38
