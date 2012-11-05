@@ -5,12 +5,12 @@
 Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
-Version:	1.0
-Release:	8
-License:	GPL
+Version:	1.2.0
+Release:	1
+License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
-# Source0-md5:	00a825db46a70ba8ef9fc95da9cc7c1e
+# Source0-md5:	d7b18b673c48abfee65a9c0245df0415
 Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
 # Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
 Source2:	qemu.binfmt
@@ -28,13 +28,7 @@ Source10:	ksmtuned.conf
 Source11:	qemu-guest-agent.service
 Source12:	99-qemu-guest-agent.rules
 Patch0:		%{name}-whitelist.patch
-Patch1:		Fix_save-restore_of_in-kernel_i8259.patch
-# Feature patches, should be in 1.1 before release
-Patch2:		enable_architectural_PMU_cpuid_leaf.patch
-Patch3:		qemu_virtio-scsi_support.patch
-Patch4:		qemu-kvm-cflags.patch
-# Update to qemu 1.0.1
-Patch100:	qemu-1.0.1.patch
+Patch1:		%{name}-fixes.patch
 URL:		http://www.linux-kvm.org/
 BuildRequires:	SDL-devel >= 1.2.1
 BuildRequires:	alsa-lib-devel
@@ -306,6 +300,23 @@ dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
 
 Ten pakiet zawiera emulator systemu z procesorem MIPS.
 
+%package system-or32
+Summary:	QEMU system emulator for OpenRISC
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem OpenRISC
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-or32
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator with OpenRISC CPU.
+
+%description system-or32 -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem OpenRISC.
 
 %package system-ppc
 Summary:	QEMU system emulator for PowerPC
@@ -379,6 +390,24 @@ dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
 
 Ten pakiet zawiera emulator systemu z procesorem SPARC/SPARC64.
 
+%package system-unicore32
+Summary:	QEMU system emulator for UniCore32
+Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem UniCore32
+Group:		Development/Tools
+Requires:	%{name}-common = %{version}-%{release}
+
+%description system-unicore32
+QEMU is a generic and open source processor emulator which achieves a
+good emulation speed by using dynamic translation.
+
+This package provides the system emulator with UniCore32 CPU.
+
+%description system-unicore32 -l pl.UTF-8
+QEMU to ogólny, mający otwarte źródła emulator procesora, osiągający
+dobrą szybkość emulacji dzięki użyciu translacji dynamicznej.
+
+Ten pakiet zawiera emulator systemu z procesorem UniCore32.
+
 %package system-x86
 Summary:	QEMU system emulator for x86
 Summary(pl.UTF-8):	QEMU - emulator systemu z procesorem x86
@@ -450,13 +479,7 @@ Ten pakiet nie musi być zainstalowany w systemie hosta.
 %prep
 %setup -q
 %patch0 -p1
-
 %patch1 -p1
-%patch2 -p1
-%patch3 -p1
-%patch4 -p1
-
-%patch100 -p1
 
 cp -a %{SOURCE1} pc-bios/bios.bin
 
@@ -478,11 +501,9 @@ ln -s ../error.h qapi/error.h
 	--enable-vnc-sasl \
 	--enable-vnc-jpeg \
 	--enable-vnc-png \
-	--enable-vnc-thread \
 	--enable-curses \
 	--enable-bluez \
-	--enable-kvm-device-assignment \
-	--enable-kvm-pit \
+	--enable-kvm \
 	--enable-system \
 	--enable-user \
 	--enable-mixemu \
@@ -498,9 +519,14 @@ ln -s ../error.h qapi/error.h
 	%{__enable_disable spice} \
 	--disable-strip
 
-%{__make} V=99
+# note: CONFIG_QEMU_HELPERDIR is used when compiling, libexecdir when installing;
+# --libexecdir in configure is nop
+%{__make} \
+	V=99 \
+	CONFIG_QEMU_HELPERDIR="%{_libdir}"
 cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
-%{__make} clean V=99
+%{__make} clean \
+	V=99
 %endif
 
 ./configure \
@@ -516,7 +542,6 @@ cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
 	--enable-vnc-sasl \
 	--enable-vnc-jpeg \
 	--enable-vnc-png \
-	--enable-vnc-thread \
 	--enable-curses \
 	--enable-bluez \
 	--disable-kvm \
@@ -537,7 +562,11 @@ cp -a x86_64-softmmu/qemu-system-x86_64 qemu-kvm
 %endif
 	--disable-strip
 
-%{__make} V=99
+# note: CONFIG_QEMU_HELPERDIR is used when compiling, libexecdir when installing;
+# --libexecdir in configure is nop
+%{__make} \
+	V=99 \
+	CONFIG_QEMU_HELPERDIR="%{_libdir}"
 
 %{__cc} %{SOURCE7} %{rpmcflags} -o ksmctl
 
@@ -549,7 +578,8 @@ install -d $RPM_BUILD_ROOT{%{systemdunitdir},/usr/lib/binfmt.d} \
 
 %{__make} install \
 	V=99 \
-	DESTDIR=$RPM_BUILD_ROOT
+	DESTDIR=$RPM_BUILD_ROOT \
+	libexecdir=%{_libdir}
 
 install -d $RPM_BUILD_ROOT%{_sysconfdir}
 cat <<'EOF' > $RPM_BUILD_ROOT%{_sysconfdir}/qemu-ifup
@@ -570,7 +600,7 @@ install -p %{SOURCE10} $RPM_BUILD_ROOT%{_sysconfdir}/ksmtuned.conf
 %ifarch %{ix86} %{x8664}
 install qemu-kvm $RPM_BUILD_ROOT%{_bindir}/qemu-system-x86_64
 ln -s qemu-system-x86_64 $RPM_BUILD_ROOT%{_bindir}/qemu-kvm
-install kvm/kvm_stat $RPM_BUILD_ROOT%{_bindir}
+install scripts/kvm/kvm_stat $RPM_BUILD_ROOT%{_bindir}
 install -p %{SOURCE3} $RPM_BUILD_ROOT/etc/modules-load.d/kvm.conf
 install -p %{SOURCE4} $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d
 %endif
@@ -603,6 +633,7 @@ done < %{SOURCE2}
 
 # already packaged
 %{__rm} $RPM_BUILD_ROOT%{_docdir}/qemu/qemu-{doc,tech}.html
+%{__rm} $RPM_BUILD_ROOT%{_docdir}/qemu/qmp-commands.txt
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -652,7 +683,7 @@ fi
 
 %files common
 %defattr(644,root,root,755)
-%doc README qemu-doc.html qemu-tech.html
+%doc README qemu-doc.html qemu-tech.html QMP/qmp-commands.txt
 %attr(755,root,root) %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/qemu-ifup
 %dir %{_sysconfdir}/qemu
 %attr(755,root,root) %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/qemu/target-*.conf
@@ -662,13 +693,19 @@ fi
 %{systemdunitdir}/ksm.service
 %{systemdunitdir}/ksmtuned.service
 %attr(755,root,root) %{_bindir}/qemu-nbd
+%attr(755,root,root) %{_bindir}/virtfs-proxy-helper
+%attr(755,root,root) %{_bindir}/vscclient
+%attr(755,root,root) %{_libdir}/qemu-bridge-helper
 %attr(755,root,root) %{_sbindir}/ksmctl
 %attr(755,root,root) %{_sbindir}/ksmtuned
 %{_mandir}/man1/qemu.1*
+%{_mandir}/man1/virtfs-proxy-helper.1*
 %{_mandir}/man8/qemu-nbd.8*
 
 %dir %{_datadir}/qemu
+%{_datadir}/qemu/cpus-*.conf
 %{_datadir}/qemu/keymaps
+%{_datadir}/qemu/qemu-icon.bmp
 # various bios images
 %{_datadir}/qemu/*.bin
 %{_datadir}/qemu/*.rom
@@ -696,6 +733,7 @@ fi
 %attr(755,root,root) %{_bindir}/qemu-microblazeel
 %attr(755,root,root) %{_bindir}/qemu-mips
 %attr(755,root,root) %{_bindir}/qemu-mipsel
+%attr(755,root,root) %{_bindir}/qemu-or32
 %attr(755,root,root) %{_bindir}/qemu-ppc
 %attr(755,root,root) %{_bindir}/qemu-ppc64
 %attr(755,root,root) %{_bindir}/qemu-ppc64abi32
@@ -740,6 +778,10 @@ fi
 %attr(755,root,root) %{_bindir}/qemu-system-mips64
 %attr(755,root,root) %{_bindir}/qemu-system-mips64el
 
+%files system-or32
+%defattr(644,root,root,755)
+%attr(755,root,root) %{_bindir}/qemu-system-or32
+
 %files system-ppc
 %defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-ppc
@@ -759,6 +801,10 @@ fi
 %defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/qemu-system-sparc
 %attr(755,root,root) %{_bindir}/qemu-system-sparc64
+
+%files system-unicore32
+%defattr(644,root,root,755)
+%attr(755,root,root) %{_bindir}/qemu-system-unicore32
 
 %files system-x86
 %defattr(644,root,root,755)
