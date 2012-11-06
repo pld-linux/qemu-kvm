@@ -1,0 +1,24 @@
+--- qemu-1.2.0/configure.orig	2012-09-05 16:03:06.000000000 +0200
++++ qemu-1.2.0/configure	2012-09-23 18:41:12.717279277 +0200
+@@ -281,10 +281,6 @@
+ QEMU_CFLAGS="-Wstrict-prototypes -Wredundant-decls $QEMU_CFLAGS"
+ QEMU_CFLAGS="-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE $QEMU_CFLAGS"
+ QEMU_INCLUDES="-I. -I\$(SRC_PATH) -I\$(SRC_PATH)/fpu"
+-if test "$debug_info" = "yes"; then
+-    CFLAGS="-g $CFLAGS"
+-    LDFLAGS="-g $LDFLAGS"
+-fi
+ 
+ # make source path absolute
+ source_path=`cd "$source_path"; pwd`
+@@ -2995,10 +2991,6 @@
+ # End of CC checks
+ # After here, no more $cc or $ld runs
+ 
+-if test "$debug" = "no" ; then
+-  CFLAGS="-O2 -D_FORTIFY_SOURCE=2 $CFLAGS"
+-fi
+-
+ # Disable zero malloc errors for official releases unless explicitly told to
+ # enable/disable
+ if test -z "$zero_malloc" ; then

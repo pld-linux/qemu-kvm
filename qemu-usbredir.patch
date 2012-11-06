@@ -1,0 +1,15 @@
+--- qemu-1.2.0/configure.orig	2012-10-22 19:32:36.328942334 +0200
++++ qemu-1.2.0/configure	2012-10-27 13:42:38.111694222 +0200
+@@ -2752,6 +2752,12 @@
+         usb_redir_libs=$($pkg_config --libs libusbredirparser 2>/dev/null)
+         QEMU_CFLAGS="$QEMU_CFLAGS $usb_redir_cflags"
+         LIBS="$LIBS $usb_redir_libs"
++    elif $pkg_config libusbredirparser-0.5 >/dev/null 2>&1 ; then
++        usb_redir="yes"
++        usb_redir_cflags=$($pkg_config --cflags libusbredirparser-0.5 2>/dev/null)
++        usb_redir_libs=$($pkg_config --libs libusbredirparser-0.5 2>/dev/null)
++        QEMU_CFLAGS="$QEMU_CFLAGS $usb_redir_cflags"
++        LIBS="$LIBS $usb_redir_libs"
+     else
+         if test "$usb_redir" = "yes"; then
+             feature_not_found "usb-redir"
