@@ -1,4 +1,7 @@
 #
+# TODO: - build with system libcacard
+
+#
 # Conditional build:
 %bcond_without	sdl		# SDL UI and audio support
 %bcond_without	opengl		# OpenGL support
@@ -13,7 +16,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.2.0
-Release:	3
+Release:	4
 License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
@@ -732,7 +735,6 @@ fi
 %{systemdunitdir}/ksmtuned.service
 %attr(755,root,root) %{_bindir}/qemu-nbd
 %attr(755,root,root) %{_bindir}/virtfs-proxy-helper
-%attr(755,root,root) %{_bindir}/vscclient
 %attr(755,root,root) %{_libdir}/qemu-bridge-helper
 %attr(755,root,root) %{_sbindir}/ksmctl
 %attr(755,root,root) %{_sbindir}/ksmtuned
