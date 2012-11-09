@@ -1,7 +1,4 @@
 #
-# TODO: - build with system libcacard
-
-#
 # Conditional build:
 %bcond_without	sdl		# SDL UI and audio support
 %bcond_without	opengl		# OpenGL support
@@ -41,6 +38,7 @@ Patch0:		%{name}-whitelist.patch
 Patch1:		%{name}-fixes.patch
 Patch2:		qemu-cflags.patch
 Patch3:		qemu-usbredir.patch
+Patch4:		qemu-system-libcacard.patch
 URL:		http://www.linux-kvm.org/
 %{?with_opengl:BuildRequires:	OpenGL-GLX-devel}
 %{?with_sdl:BuildRequires:	SDL-devel >= 1.2.1}
@@ -54,6 +52,7 @@ BuildRequires:	cyrus-sasl-devel >= 2
 BuildRequires:	glib2-devel >= 1:2.12
 BuildRequires:	gnutls-devel
 BuildRequires:	libaio-devel
+BuildRequires:	libcacard-devel
 BuildRequires:	libcap-devel
 BuildRequires:	libcap-ng-devel
 BuildRequires:	libfdt-devel
@@ -529,6 +528,9 @@ Ten pakiet nie musi być zainstalowany w systemie hosta.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
+
+%{__mv} libcacard libcacard-use-system-lib
 
 cp -a %{SOURCE1} pc-bios/bios.bin
 

@@ -1,0 +1,163 @@
+diff -ur qemu-kvm-1.2.0/configure qemu-kvm-1.2.0-system-libcacard/configure
+--- qemu-kvm-1.2.0/configure	2012-11-09 08:07:04.559211692 +0100
++++ qemu-kvm-1.2.0-system-libcacard/configure	2012-11-09 07:56:31.483388690 +0100
+@@ -2725,9 +2725,10 @@
+ #include <pk11pub.h>
+ int main(void) { PK11_FreeSlot(0); return 0; }
+ EOF
+-        smartcard_includes="-I\$(SRC_PATH)/libcacard"
+-        libcacard_libs="$($pkg_config --libs nss 2>/dev/null) $glib_libs"
+-        libcacard_cflags="$($pkg_config --cflags nss 2>/dev/null) $glib_cflags"
++        libcacard_libs="$($pkg_config --libs libcacard 2>/dev/null)"
++        libcacard_cflags="$($pkg_config --cflags libcacard 2>/dev/null)"
++        nss_libs="$($pkg_config --libs nss 2>/dev/null) $glib_libs"
++        nss_cflags="$($pkg_config --cflags nss 2>/dev/null) $glib_cflags"
+         test_cflags="$libcacard_cflags"
+         # The header files in nss < 3.13.3 have a bug which causes them to
+         # emit a warning. If we're going to compile QEMU with -Werror, then
+@@ -2737,11 +2738,10 @@
+             test_cflags="-Werror $test_cflags"
+         fi
+         if $pkg_config --atleast-version=3.12.8 nss >/dev/null 2>&1 && \
+-          compile_prog "$test_cflags" "$libcacard_libs"; then
++          compile_prog "$test_cflags" "$nss_libs"; then
+             smartcard_nss="yes"
+-            QEMU_CFLAGS="$QEMU_CFLAGS $libcacard_cflags"
+-            QEMU_INCLUDES="$QEMU_INCLUDES $smartcard_includes"
+-            libs_softmmu="$libcacard_libs $libs_softmmu"
++            QEMU_CFLAGS="$QEMU_CFLAGS $libcacard_cflags $nss_cflags"
++            libs_softmmu="$libcacard_libs $nss_libs $libs_softmmu"
+         else
+             if test "$smartcard_nss" = "yes"; then
+                 feature_not_found "nss"
+@@ -3069,9 +3069,6 @@
+     fi
+   fi
+ fi
+-if test "$smartcard_nss" = "yes" ; then
+-  tools="vscclient\$(EXESUF) $tools"
+-fi
+ 
+ # Mac OS X ships with a broken assembler
+ roms=
+@@ -3454,6 +3451,8 @@
+   echo "CONFIG_SMARTCARD_NSS=y" >> $config_host_mak
+   echo "libcacard_libs=$libcacard_libs" >> $config_host_mak
+   echo "libcacard_cflags=$libcacard_cflags" >> $config_host_mak
++  echo "nss_libs=$nss_libs" >> $config_host_mak
++  echo "nss_cflags=$nss_cflags" >> $config_host_mak
+ fi
+ 
+ if test "$usb_redir" = "yes" ; then
+@@ -3909,9 +3908,6 @@
+   echo "LIBS+=$libs_softmmu $target_libs_softmmu" >> $config_target_mak
+   echo "HWDIR=../libhw$target_phys_bits" >> $config_target_mak
+   echo "subdir-$target: subdir-libhw$target_phys_bits" >> $config_host_mak
+-  if test "$smartcard_nss" = "yes" ; then
+-    echo "subdir-$target: subdir-libcacard" >> $config_host_mak
+-  fi
+   case "$target_arch2" in
+     i386|x86_64)
+       echo "CONFIG_HAVE_CORE_DUMP=y" >> $config_target_mak
+@@ -4118,10 +4114,9 @@
+ DIRS="$DIRS pc-bios/optionrom pc-bios/spapr-rtas"
+ DIRS="$DIRS roms/seabios roms/vgabios"
+ DIRS="$DIRS qapi-generated"
+-DIRS="$DIRS libcacard libcacard/libcacard libcacard/trace"
+ FILES="Makefile tests/tcg/Makefile qdict-test-data.txt"
+ FILES="$FILES tests/tcg/cris/Makefile tests/tcg/cris/.gdbinit"
+-FILES="$FILES tests/tcg/lm32/Makefile libcacard/Makefile"
++FILES="$FILES tests/tcg/lm32/Makefile"
+ FILES="$FILES pc-bios/optionrom/Makefile pc-bios/keymaps"
+ FILES="$FILES pc-bios/spapr-rtas/Makefile"
+ FILES="$FILES roms/seabios/Makefile roms/vgabios/Makefile"
+diff -ur qemu-kvm-1.2.0/hw/ccid-card-passthru.c qemu-kvm-1.2.0-system-libcacard/hw/ccid-card-passthru.c
+--- qemu-kvm-1.2.0/hw/ccid-card-passthru.c	2012-09-06 10:31:27.000000000 +0200
++++ qemu-kvm-1.2.0-system-libcacard/hw/ccid-card-passthru.c	2012-11-09 07:44:11.286748135 +0100
+@@ -12,7 +12,7 @@
+ #include "qemu_socket.h"
+ #include "monitor.h"
+ #include "hw/ccid.h"
+-#include "libcacard/vscard_common.h"
++#include <cacard/vscard_common.h>
+ 
+ #define DPRINTF(card, lvl, fmt, ...)                    \
+ do {                                                    \
+diff -ur qemu-kvm-1.2.0/Makefile qemu-kvm-1.2.0-system-libcacard/Makefile
+--- qemu-kvm-1.2.0/Makefile	2012-09-06 10:31:27.000000000 +0200
++++ qemu-kvm-1.2.0-system-libcacard/Makefile	2012-11-09 07:42:39.346751378 +0100
+@@ -98,8 +98,6 @@
+ include $(SRC_PATH)/Makefile.objs
+ endif
+ 
+-subdir-libcacard: $(oslib-obj-y) $(trace-obj-y) qemu-timer-common.o
+-
+ $(filter %-softmmu,$(SUBDIR_RULES)): $(universal-obj-y) $(trace-obj-y) $(common-obj-y) $(extra-obj-y) subdir-libdis
+ 
+ $(filter %-user,$(SUBDIR_RULES)): $(universal-obj-y) $(trace-obj-y) subdir-libdis-user subdir-libuser
+@@ -130,25 +128,6 @@
+ 	$(call quiet-command,$(WINDRES) -I. -o $@ $<,"  RC    $(TARGET_DIR)$@")
+ 
+ version-obj-$(CONFIG_WIN32) += version.o
+-######################################################################
+-# Support building shared library libcacard
+-
+-.PHONY: libcacard.la install-libcacard
+-ifeq ($(LIBTOOL),)
+-libcacard.la:
+-	@echo "libtool is missing, please install and rerun configure"; exit 1
+-
+-install-libcacard:
+-	@echo "libtool is missing, please install and rerun configure"; exit 1
+-else
+-libcacard.la: $(oslib-obj-y) qemu-timer-common.o $(addsuffix .lo, $(basename $(trace-obj-y)))
+-	$(call quiet-command,$(MAKE) $(SUBDIR_MAKEFLAGS) -C libcacard V="$(V)" TARGET_DIR="$*/" libcacard.la,)
+-
+-install-libcacard: libcacard.la
+-	$(call quiet-command,$(MAKE) $(SUBDIR_MAKEFLAGS) -C libcacard V="$(V)" TARGET_DIR="$*/" install-libcacard,)
+-endif
+-
+-######################################################################
+ 
+ qemu-img.o: qemu-img-cmds.h
+ 
+@@ -163,9 +142,6 @@
+ 
+ qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
+ 
+-vscclient$(EXESUF): $(libcacard-y) $(oslib-obj-y) $(trace-obj-y) $(tools-obj-y) qemu-timer-common.o libcacard/vscclient.o
+-	$(call quiet-command,$(CC) $(LDFLAGS) -o $@ $^ $(libcacard_libs) $(LIBS),"  LINK  $@")
+-
+ fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/virtio-9p-marshal.o oslib-posix.o $(trace-obj-y)
+ fsdev/virtfs-proxy-helper$(EXESUF): LIBS += -lcap
+ 
+@@ -226,7 +202,7 @@
+ 	rm -rf qapi-generated
+ 	rm -rf qga/qapi-generated
+ 	$(MAKE) -C tests/tcg clean
+-	for d in $(ALL_SUBDIRS) $(QEMULIBS) libcacard; do \
++	for d in $(ALL_SUBDIRS) $(QEMULIBS); do \
+ 	if test -d $$d; then $(MAKE) -C $$d $@ || exit 1; fi; \
+ 	rm -f $$d/qemu-options.def; \
+         done
+diff -ur qemu-kvm-1.2.0/Makefile.objs qemu-kvm-1.2.0-system-libcacard/Makefile.objs
+--- qemu-kvm-1.2.0/Makefile.objs	2012-09-06 10:31:27.000000000 +0200
++++ qemu-kvm-1.2.0-system-libcacard/Makefile.objs	2012-11-09 07:45:10.880079366 +0100
+@@ -204,17 +204,6 @@
+ $(trace-obj-y): $(GENERATED_HEADERS)
+ 
+ ######################################################################
+-# smartcard
+-
+-libcacard-y += libcacard/cac.o libcacard/event.o
+-libcacard-y += libcacard/vcard.o libcacard/vreader.o
+-libcacard-y += libcacard/vcard_emul_nss.o
+-libcacard-y += libcacard/vcard_emul_type.o
+-libcacard-y += libcacard/card_7816.o
+-
+-common-obj-$(CONFIG_SMARTCARD_NSS) += $(libcacard-y)
+-
+-######################################################################
+ # qapi
+ 
+ qapi-obj-y = qapi/
