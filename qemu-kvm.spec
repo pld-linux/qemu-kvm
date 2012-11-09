@@ -38,7 +38,7 @@ Patch0:		%{name}-whitelist.patch
 Patch1:		%{name}-fixes.patch
 Patch2:		qemu-cflags.patch
 Patch3:		qemu-usbredir.patch
-Patch4:		qemu-system-libcacard.patch
+Patch4:		%{name}-system-libcacard.patch
 URL:		http://www.linux-kvm.org/
 %{?with_opengl:BuildRequires:	OpenGL-GLX-devel}
 %{?with_sdl:BuildRequires:	SDL-devel >= 1.2.1}
