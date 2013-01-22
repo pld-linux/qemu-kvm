@@ -13,7 +13,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.2.0
-Release:	7
+Release:	8
 License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
@@ -153,7 +153,7 @@ Requires(pre):	/usr/sbin/useradd
 Requires(post,preun,postun):	systemd-units >= 38
 Requires:	glib2 >= 1:2.12
 Provides:	group(kvm)
-Provides:	qemu-common
+Provides:	qemu-common = %{version}-%{release}
 Requires:	systemd-units >= 38
 Conflicts:	qemu-kvm < 1.0-3
 
