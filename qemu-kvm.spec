@@ -13,7 +13,7 @@ Summary:	QEMU CPU Emulator
 Summary(pl.UTF-8):	QEMU - emulator procesora
 Name:		qemu-kvm
 Version:	1.2.0
-Release:	8
+Release:	9
 License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
@@ -39,6 +39,7 @@ Patch1:		%{name}-fixes.patch
 Patch2:		qemu-cflags.patch
 Patch3:		qemu-usbredir.patch
 Patch4:		%{name}-system-libcacard.patch
+Patch5:		%{name}-link.patch
 URL:		http://www.linux-kvm.org/
 %{?with_opengl:BuildRequires:	OpenGL-GLX-devel}
 %{?with_sdl:BuildRequires:	SDL-devel >= 1.2.1}
@@ -529,6 +530,7 @@ Ten pakiet nie musi być zainstalowany w systemie hosta.
 %patch2 -p1
 %patch3 -p1
 %patch4 -p1
+%patch5 -p1
 
 %{__mv} libcacard libcacard-use-system-lib
 
