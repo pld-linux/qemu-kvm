@@ -1,36 +1,18 @@
-diff -ur qemu-kvm-1.2.0/Makefile qemu-kvm-1.2.0-link/Makefile
---- qemu-kvm-1.2.0/Makefile	2013-01-30 14:17:35.513423335 +0100
-+++ qemu-kvm-1.2.0-link/Makefile	2013-01-30 14:13:31.834592506 +0100
-@@ -136,8 +136,11 @@
- 	iohandler.o cutils.o iov.o async.o
- tools-obj-$(CONFIG_POSIX) += compatfd.o
+--- qemu-kvm-1.2.0/configure~	2013-01-30 14:21:52.705707010 +0100
++++ qemu-kvm-1.2.0/configure	2013-01-30 15:51:18.582483375 +0100
+@@ -2678,13 +2678,14 @@
+ cat > $TMPC <<EOF
+ #include <signal.h>
+ #include <time.h>
+-int main(void) { return clock_gettime(CLOCK_REALTIME, NULL); }
++int main(void) { timer_t tid; (void)timer_gettime(tid, NULL); return clock_gettime(CLOCK_REALTIME, NULL); }
+ EOF
  
-+qemu-img$(EXESUF): LIBS += -lrt
- qemu-img$(EXESUF): qemu-img.o $(tools-obj-y) $(block-obj-y)
-+qemu-nbd$(EXESUF): LIBS += -lrt
- qemu-nbd$(EXESUF): qemu-nbd.o $(tools-obj-y) $(block-obj-y)
-+qemu-io$(EXESUF): LIBS += -lrt
- qemu-io$(EXESUF): qemu-io.o cmd.o $(tools-obj-y) $(block-obj-y)
+ if compile_prog "" "" ; then
+   :
+ elif compile_prog "" "-lrt" ; then
+   LIBS="-lrt $LIBS"
++  libs_qga="-lrt $libs_qga"
+ fi
  
- qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
-@@ -151,7 +151,7 @@
- qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx
- 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $@")
- 
--qemu-ga$(EXESUF): LIBS = $(LIBS_QGA)
-+qemu-ga$(EXESUF): LIBS = $(LIBS_QGA) -lrt
- qemu-ga$(EXESUF): QEMU_CFLAGS += -I qga/qapi-generated
- 
- gen-out-type = $(subst .,-,$(suffix $@))
-diff -ur qemu-kvm-1.2.0/Makefile.target qemu-kvm-1.2.0-link/Makefile.target
---- qemu-kvm-1.2.0/Makefile.target	2012-09-06 10:31:27.000000000 +0200
-+++ qemu-kvm-1.2.0-link/Makefile.target	2013-01-30 14:17:14.549903840 +0100
-@@ -8,6 +8,8 @@
- include $(HWDIR)/config.mak
- endif
- 
-+LIBS += -lrt
-+
- $(call set-vpath, $(SRC_PATH))
- ifdef CONFIG_LINUX
- QEMU_CFLAGS += -I../linux-headers
+ if test "$darwin" != "yes" -a "$mingw32" != "yes" -a "$solaris" != yes -a \
