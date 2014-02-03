@@ -18,8 +18,8 @@ License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
 # Source0-md5:	d7b18b673c48abfee65a9c0245df0415
-Source1:	http://www.linuxtogo.org/~kevin/SeaBIOS/bios.bin-1.6.3
-# Source1-md5:	9d3b8a7fbd65e5250b9d005a79ffaf34
+Source1:	http://code.coreboot.org/p/seabios/downloads/get/bios.bin-1.7.4.gz
+# Source1-md5:	c5f88765e74945f7fa18c3a3141f5334
 Source2:	qemu.binfmt
 # Loads kvm kernel modules at boot
 Source3:	kvm-modules-load.conf
@@ -534,7 +534,7 @@ Ten pakiet nie musi być zainstalowany w systemie hosta.
 
 %{__mv} libcacard libcacard-use-system-lib
 
-cp -a %{SOURCE1} pc-bios/bios.bin
+%{__gzip} -d -c %{SOURCE1} > pc-bios/bios.bin
 
 # workaround for conflict with alsa/error.h
 ln -s ../error.h qapi/error.h
