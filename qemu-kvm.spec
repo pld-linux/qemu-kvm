@@ -18,7 +18,8 @@ License:	GPL v2+
 Group:		Applications/Emulators
 Source0:	http://downloads.sourceforge.net/kvm/%{name}-%{version}.tar.gz
 # Source0-md5:	d7b18b673c48abfee65a9c0245df0415
-Source1:	http://code.coreboot.org/p/seabios/downloads/get/bios.bin-1.7.4.gz
+# http://code.coreboot.org/p/seabios/downloads/get/bios.bin-1.7.4.gz
+Source1:	bios.bin-1.7.4.gz
 # Source1-md5:	c5f88765e74945f7fa18c3a3141f5334
 Source2:	qemu.binfmt
 # Loads kvm kernel modules at boot
