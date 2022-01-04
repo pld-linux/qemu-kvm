@@ -710,10 +710,10 @@ fi
 %systemd_trigger ksmtuned.service
 
 %post user
-%systemd_service_restart systemd-binfmt.service
+%systemd_post systemd-binfmt.service
 
 %postun user
-%systemd_service_restart systemd-binfmt.service
+%systemd_post systemd-binfmt.service
 
 %post guest-agent
 %systemd_reload
